@@ -24,6 +24,14 @@ import {
   Pencil
 } from 'lucide-react';
 
+// --- CARGA INMEDIATA DE TAILWIND CDN (Evita parpadeos sin estilo) ---
+if (typeof document !== 'undefined' && !document.getElementById('tailwind-cdn-script')) {
+  const script = document.createElement('script');
+  script.id = 'tailwind-cdn-script';
+  script.src = 'https://cdn.tailwindcss.com';
+  document.head.appendChild(script);
+}
+
 // --- UTILIDADES DE FORMATO ---
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('es-AR', {
@@ -117,12 +125,21 @@ const INITIAL_SALES = [
 
 // --- COMPONENTE PRINCIPAL ---
 export default function BusinessManagerApp() {
+  const [, setIsTailwindReady] = useState(() => {
+    return typeof window !== 'undefined' && !!window.tailwind;
+  });
+
   useEffect(() => {
-    if (!document.getElementById('tailwind-cdn-script')) {
-      const script = document.createElement('script');
-      script.id = 'tailwind-cdn-script';
-      script.src = 'https://cdn.tailwindcss.com';
-      document.head.appendChild(script);
+    const script = document.getElementById('tailwind-cdn-script');
+    if (!script) return;
+
+    const handleLoad = () => setIsTailwindReady(true);
+
+    if (window.tailwind) {
+      setIsTailwindReady(true);
+    } else {
+      script.addEventListener('load', handleLoad);
+      return () => script.removeEventListener('load', handleLoad);
     }
   }, []);
 
