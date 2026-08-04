@@ -245,13 +245,36 @@ export default function BusinessManagerApp() {
   }, [products, promos, categoryFilter, searchTerm]);
 
   const addToSaleCart = (item) => {
+    // Validación de stock para Productos
     if (item.type === 'product' && item.stock <= 0) {
       notify('⚠️ Producto sin stock disponible');
       return;
     }
 
+    // Validación de stock para Promociones
+    if (item.type === 'promo') {
+      const hasNoStock = item.raw.items?.some((comp) => {
+        const p = products.find((prod) => prod.id === comp.productId);
+        return !p || p.stock < comp.quantity;
+      });
+      if (hasNoStock) {
+        notify('⚠️ Promoción sin stock disponible');
+        return;
+      }
+    }
+
     setSaleCart((prev) => {
       const existing = prev.find((i) => i.id === item.id);
+      
+      // Control de stock máximo en carrito para productos
+      if (item.type === 'product') {
+        const currentQtyInCart = existing ? existing.qty : 0;
+        if (currentQtyInCart + 1 > item.stock) {
+          notify(`⚠️ Alcanzaste el límite de stock de ${item.name}`);
+          return prev;
+        }
+      }
+
       if (existing) {
         return prev.map((i) => (i.id === item.id ? { ...i, qty: i.qty + 1 } : i));
       }
@@ -265,6 +288,16 @@ export default function BusinessManagerApp() {
         .map((item) => {
           if (item.id === id) {
             const newQty = item.qty + delta;
+
+            // Verificar no exceder el stock al aumentar desde el carrito
+            if (delta > 0 && item.type === 'product') {
+              const prod = products.find((p) => p.id === item.id);
+              if (prod && newQty > prod.stock) {
+                notify(`⚠️ No hay suficiente stock para agregar más ${item.name}`);
+                return item;
+              }
+            }
+
             return newQty <= 0 ? null : { ...item, qty: newQty };
           }
           return item;
@@ -676,45 +709,95 @@ export default function BusinessManagerApp() {
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {availableItems.map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={() => addToSaleCart(item)}
-                    className="bg-slate-900/80 border border-slate-800 hover:border-fuchsia-500/50 p-4 rounded-2xl cursor-pointer transition-all hover:scale-[1.02] flex flex-col justify-between space-y-3 group"
-                  >
-                    <div>
-                      <div className="flex justify-between items-start gap-1">
-                        <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                          {item.type === 'promo' ? 'PROMO' : item.brand}
-                        </span>
-                        {item.type === 'product' && (
-                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
-                            item.stock <= item.raw.minStock
-                              ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                              : 'bg-slate-800 text-slate-400'
-                          }`}>
-                            Stock: {item.stock}
+                {availableItems.map((item) => {
+                  // Determinar si el producto o la promo está SIN STOCK
+                  const isOutOfStock =
+                    item.type === 'product'
+                      ? item.stock <= 0
+                      : item.raw.items?.some((comp) => {
+                          const p = products.find((prod) => prod.id === comp.productId);
+                          return !p || p.stock < comp.quantity;
+                        });
+
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => !isOutOfStock && addToSaleCart(item)}
+                      className={`p-4 rounded-2xl transition-all flex flex-col justify-between space-y-3 group ${
+                        isOutOfStock
+                          ? 'bg-red-950/30 border border-red-500/60 opacity-80 cursor-not-allowed'
+                          : 'bg-slate-900/80 border border-slate-800 hover:border-fuchsia-500/50 cursor-pointer hover:scale-[1.02]'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex justify-between items-start gap-1">
+                          <span
+                            className={`text-[10px] uppercase font-bold tracking-wider ${
+                              isOutOfStock ? 'text-red-400' : 'text-slate-500'
+                            }`}
+                          >
+                            {item.type === 'promo' ? 'PROMO' : item.brand}
                           </span>
+                          {item.type === 'product' && (
+                            <span
+                              className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
+                                item.stock <= 0
+                                  ? 'bg-red-500 text-slate-950 border border-red-400 font-extrabold'
+                                  : item.stock <= item.raw.minStock
+                                  ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {item.stock <= 0 ? 'Sin Stock' : `Stock: ${item.stock}`}
+                            </span>
+                          )}
+                          {item.type === 'promo' && isOutOfStock && (
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full font-bold bg-red-500 text-slate-950 border border-red-400 font-extrabold">
+                              Sin Stock
+                            </span>
+                          )}
+                        </div>
+                        <h3
+                          className={`font-semibold text-xs mt-1 line-clamp-2 transition ${
+                            isOutOfStock
+                              ? 'text-red-300 font-bold'
+                              : 'text-slate-100 group-hover:text-fuchsia-400'
+                          }`}
+                        >
+                          {item.name}
+                        </h3>
+                        {item.description && (
+                          <p
+                            className={`text-[10px] line-clamp-2 mt-1 ${
+                              isOutOfStock ? 'text-red-400/80' : 'text-slate-400'
+                            }`}
+                          >
+                            {item.description}
+                          </p>
                         )}
                       </div>
-                      <h3 className="font-semibold text-xs text-slate-100 group-hover:text-fuchsia-400 transition mt-1 line-clamp-2">
-                        {item.name}
-                      </h3>
-                      {item.description && (
-                        <p className="text-[10px] text-slate-400 line-clamp-2 mt-1">{item.description}</p>
-                      )}
-                    </div>
 
-                    <div className="flex justify-between items-center pt-2 border-t border-slate-800/80">
-                      <span className="font-mono font-bold text-sm text-fuchsia-400">
-                        {formatCurrency(item.price)}
-                      </span>
-                      <div className="w-7 h-7 rounded-xl bg-slate-800 group-hover:bg-fuchsia-500 group-hover:text-slate-950 flex items-center justify-center text-slate-300 transition shadow">
-                        <Plus className="w-4 h-4 stroke-[3]" />
+                      <div className="flex justify-between items-center pt-2 border-t border-slate-800/80">
+                        <span
+                          className={`font-mono font-bold text-sm ${
+                            isOutOfStock ? 'text-red-400' : 'text-fuchsia-400'
+                          }`}
+                        >
+                          {formatCurrency(item.price)}
+                        </span>
+                        <div
+                          className={`w-7 h-7 rounded-xl flex items-center justify-center transition shadow ${
+                            isOutOfStock
+                              ? 'bg-red-900/50 text-red-400 cursor-not-allowed'
+                              : 'bg-slate-800 group-hover:bg-fuchsia-500 group-hover:text-slate-950 text-slate-300'
+                          }`}
+                        >
+                          <Plus className="w-4 h-4 stroke-[3]" />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
