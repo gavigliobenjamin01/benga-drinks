@@ -176,8 +176,16 @@ export default function BusinessManagerApp() {
     return { totalRevenue, totalCost, netProfit, totalPendingDebt, lowStockCount, stockValuation };
   }, [sales, clients, products]);
 
+  // Categorías para Registrar Venta (incluye la pestaña especial "Promociones")
   const categories = useMemo(() => {
-    return ['Todas', ...Array.from(new Set(products.map((p) => p.category)))];
+    const prodCats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
+    return ['Todas', 'Promociones', ...prodCats];
+  }, [products]);
+
+  // Categorías exclusivas para el Inventario
+  const inventoryCategories = useMemo(() => {
+    const prodCats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
+    return ['Todas', ...prodCats];
   }, [products]);
 
   // --- INVENTARIO FILTRADO POR GRUPO Y ORDENADO ALFABÉTICAMENTE ---
@@ -191,35 +199,42 @@ export default function BusinessManagerApp() {
     );
   }, [products, inventoryCategoryFilter]);
 
+  // --- ÍTEMS DISPONIBLES EN REGISTRAR VENTA ---
   const availableItems = useMemo(() => {
     let items = [];
 
-    promos.filter(p => p.active).forEach(p => {
-      items.push({
-        id: p.id,
-        name: p.name,
-        type: 'promo',
-        price: p.price,
-        description: p.description,
-        raw: p
-      });
-    });
-
-    products.forEach(p => {
-      if (categoryFilter === 'Todas' || p.category === categoryFilter) {
+    // Incluir promociones si el filtro es 'Todas' o 'Promociones'
+    if (categoryFilter === 'Todas' || categoryFilter === 'Promociones') {
+      promos.filter(p => p.active).forEach(p => {
         items.push({
           id: p.id,
           name: p.name,
-          type: 'product',
-          price: p.sellPrice,
-          costPrice: p.costPrice,
-          stock: p.stock,
-          brand: p.brand,
-          category: p.category,
+          type: 'promo',
+          price: p.price,
+          description: p.description,
           raw: p
         });
-      }
-    });
+      });
+    }
+
+    // Incluir productos solo cuando NO estemos filtrando únicamente 'Promociones'
+    if (categoryFilter !== 'Promociones') {
+      products.forEach(p => {
+        if (categoryFilter === 'Todas' || p.category === categoryFilter) {
+          items.push({
+            id: p.id,
+            name: p.name,
+            type: 'product',
+            price: p.sellPrice,
+            costPrice: p.costPrice,
+            stock: p.stock,
+            brand: p.brand,
+            category: p.category,
+            raw: p
+          });
+        }
+      });
+    }
 
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
@@ -643,6 +658,7 @@ export default function BusinessManagerApp() {
                 />
               </div>
 
+              {/* FILTROS POR CATEGORÍA EN REGISTRAR VENTA */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                 {categories.map((cat) => (
                   <button
@@ -926,7 +942,7 @@ export default function BusinessManagerApp() {
 
             {/* BARRA DE FILTRADO POR GRUPOS / CATEGORÍAS EN INVENTARIO */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-              {categories.map((cat) => (
+              {inventoryCategories.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setInventoryCategoryFilter(cat)}
