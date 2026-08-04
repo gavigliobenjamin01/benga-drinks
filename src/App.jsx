@@ -1,4 +1,14 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import {
+  getFirestore,
+  collection,
+  onSnapshot,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc
+} from 'firebase/firestore';
 import {
   LayoutDashboard,
   Package,
@@ -24,6 +34,19 @@ import {
   Pencil
 } from 'lucide-react';
 
+// --- CONFIGURACIÓN DE FIREBASE ---
+const firebaseConfig = {
+  apiKey: "AIzaSyC9kRfH-TOFv74Y0rd-HZnsgOQW1JMLLDg",
+  authDomain: "benga-drinks.firebaseapp.com",
+  projectId: "benga-drinks",
+  storageBucket: "benga-drinks.firebasestorage.app",
+  messagingSenderId: "128426396058",
+  appId: "1:128426396058:web:58ea48cf409310ed6b9223"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
 // --- UTILIDADES DE FORMATO ---
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('es-AR', {
@@ -43,7 +66,7 @@ const formatDate = (isoString) => {
   });
 };
 
-// --- DATOS INICIALES ---
+// --- DATOS INICIALES (Para la primera carga automática) ---
 const INITIAL_PRODUCTS = [
   { id: 'p1', name: 'Fernet Branca 750ml', category: 'Aperitivos', brand: 'Branca', costPrice: 7200, sellPrice: 10500, stock: 18, minStock: 8 },
   { id: 'p2', name: 'Coca-Cola 2.25L', category: 'Gaseosas', brand: 'Coca-Cola', costPrice: 1900, sellPrice: 2900, stock: 42, minStock: 15 },
@@ -118,7 +141,7 @@ const INITIAL_SALES = [
 export default function BusinessManagerApp() {
   const [isReady, setIsReady] = useState(false);
 
-  // Asegura que Tailwind esté 100% cargado antes de renderizar la app
+  // Carga e inyección dinámica de Tailwind CSS
   useEffect(() => {
     const checkTailwind = () => {
       if (window.tailwind) {
@@ -141,42 +164,54 @@ export default function BusinessManagerApp() {
   }, []);
 
   const [activeTab, setActiveTab] = useState('sales');
+  const [products, setProducts] = useState([]);
+  const [promos, setPromos] = useState([]);
+  const [sales, setSales] = useState([]);
+  const [clients, setClients] = useState([]);
 
-  const [products, setProducts] = useState(() => {
-    const saved = localStorage.getItem('benga_products');
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
-  });
-
-  const [promos, setPromos] = useState(() => {
-    const saved = localStorage.getItem('benga_promos');
-    return saved ? JSON.parse(saved) : INITIAL_PROMOS;
-  });
-
-  const [sales, setSales] = useState(() => {
-    const saved = localStorage.getItem('benga_sales');
-    return saved ? JSON.parse(saved) : INITIAL_SALES;
-  });
-
-  const [clients, setClients] = useState(() => {
-    const saved = localStorage.getItem('benga_clients');
-    return saved ? JSON.parse(saved) : INITIAL_CLIENTS;
-  });
-
+  // --- ESCUCHA DE FIRESTORE EN TIEMPO REAL CON AUTOCARGADO ---
   useEffect(() => {
-    localStorage.setItem('benga_products', JSON.stringify(products));
-  }, [products]);
+    const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
+      if (snapshot.empty) {
+        INITIAL_PRODUCTS.forEach((p) => setDoc(doc(db, 'products', p.id), p));
+      } else {
+        setProducts(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
+      }
+    });
 
-  useEffect(() => {
-    localStorage.setItem('benga_promos', JSON.stringify(promos));
-  }, [promos]);
+    const unsubPromos = onSnapshot(collection(db, 'promos'), (snapshot) => {
+      if (snapshot.empty) {
+        INITIAL_PROMOS.forEach((p) => setDoc(doc(db, 'promos', p.id), p));
+      } else {
+        setPromos(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
+      }
+    });
 
-  useEffect(() => {
-    localStorage.setItem('benga_sales', JSON.stringify(sales));
-  }, [sales]);
+    const unsubClients = onSnapshot(collection(db, 'clients'), (snapshot) => {
+      if (snapshot.empty) {
+        INITIAL_CLIENTS.forEach((c) => setDoc(doc(db, 'clients', c.id), c));
+      } else {
+        setClients(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
+      }
+    });
 
-  useEffect(() => {
-    localStorage.setItem('benga_clients', JSON.stringify(clients));
-  }, [clients]);
+    const unsubSales = onSnapshot(collection(db, 'sales'), (snapshot) => {
+      if (snapshot.empty) {
+        INITIAL_SALES.forEach((s) => setDoc(doc(db, 'sales', s.id), s));
+      } else {
+        const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
+        list.sort((a, b) => new Date(b.date) - new Date(a.date));
+        setSales(list);
+      }
+    });
+
+    return () => {
+      unsubProducts();
+      unsubPromos();
+      unsubClients();
+      unsubSales();
+    };
+  }, []);
 
   const [saleCart, setSaleCart] = useState([]);
   const [selectedClient, setSelectedClient] = useState('Cliente Casual');
@@ -297,7 +332,9 @@ export default function BusinessManagerApp() {
     }, 0);
   }, [saleCart, products]);
 
-  const handleRegisterSale = () => {
+  // --- OPERACIONES EN FIRESTORE ---
+
+  const handleRegisterSale = async () => {
     if (saleCart.length === 0) return;
 
     if (paymentMethod === 'Fiado' && selectedClient === 'Cliente Casual') {
@@ -320,16 +357,17 @@ export default function BusinessManagerApp() {
       }
     });
 
-    setProducts(updatedProducts);
+    // Actualizar stock en Firestore
+    updatedProducts.forEach((p) => {
+      updateDoc(doc(db, 'products', p.id), { stock: p.stock });
+    });
 
+    // Actualizar cliente si es fiado
     if (paymentMethod === 'Fiado') {
-      setClients((prevClients) =>
-        prevClients.map((c) =>
-          c.name === selectedClient
-            ? { ...c, debt: c.debt + cartTotal }
-            : c
-        )
-      );
+      const clientObj = clients.find((c) => c.name === selectedClient);
+      if (clientObj) {
+        updateDoc(doc(db, 'clients', clientObj.id), { debt: clientObj.debt + cartTotal });
+      }
     }
 
     const newSale = {
@@ -350,7 +388,9 @@ export default function BusinessManagerApp() {
       }))
     };
 
-    setSales([newSale, ...sales]);
+    // Guardar venta en Firestore
+    await setDoc(doc(db, 'sales', newSale.id), newSale);
+
     setSaleCart([]);
     notify(
       paymentMethod === 'Fiado'
@@ -359,75 +399,70 @@ export default function BusinessManagerApp() {
     );
   };
 
-  const handleMarkSaleAsPaid = (saleId, newPaymentMethod) => {
+  const handleMarkSaleAsPaid = async (saleId, newPaymentMethod) => {
     const saleToPay = sales.find((s) => s.id === saleId);
     if (!saleToPay || saleToPay.paymentMethod !== 'Fiado') return;
 
-    setSales((prevSales) =>
-      prevSales.map((s) =>
-        s.id === saleId ? { ...s, paymentMethod: newPaymentMethod } : s
-      )
-    );
+    await updateDoc(doc(db, 'sales', saleId), { paymentMethod: newPaymentMethod });
 
-    setClients((prevClients) =>
-      prevClients.map((c) =>
-        c.name === saleToPay.client
-          ? { ...c, debt: Math.max(0, c.debt - saleToPay.total) }
-          : c
-      )
-    );
+    const clientObj = clients.find((c) => c.name === saleToPay.client);
+    if (clientObj) {
+      await updateDoc(doc(db, 'clients', clientObj.id), {
+        debt: Math.max(0, clientObj.debt - saleToPay.total)
+      });
+    }
 
     setSaleToPayModal(null);
     notify(`✅ Venta #${saleToPay.id} marcada como PAGADA con ${newPaymentMethod}`);
   };
 
-  const handleDeleteSale = (saleId) => {
+  const handleDeleteSale = async (saleId) => {
     const saleToDelete = sales.find((s) => s.id === saleId);
     if (!saleToDelete) return;
 
-    setProducts((prevProducts) => {
-      let updated = [...prevProducts];
-
-      saleToDelete.items.forEach((item) => {
-        if (item.type === 'product' || !item.type) {
-          updated = updated.map((p) =>
-            p.id === item.id || p.name === item.name
-              ? { ...p, stock: p.stock + item.qty }
-              : p
-          );
-        } else if (item.type === 'promo') {
-          const promoRef = item.raw || promos.find((pr) => pr.id === item.id);
-          if (promoRef && promoRef.items) {
-            promoRef.items.forEach((comp) => {
-              updated = updated.map((p) =>
-                p.id === comp.productId
-                  ? { ...p, stock: p.stock + comp.quantity * item.qty }
-                  : p
-              );
-            });
-          }
+    let updatedProducts = [...products];
+    saleToDelete.items.forEach((item) => {
+      if (item.type === 'product' || !item.type) {
+        updatedProducts = updatedProducts.map((p) =>
+          p.id === item.id || p.name === item.name
+            ? { ...p, stock: p.stock + item.qty }
+            : p
+        );
+      } else if (item.type === 'promo') {
+        const promoRef = item.raw || promos.find((pr) => pr.id === item.id);
+        if (promoRef && promoRef.items) {
+          promoRef.items.forEach((comp) => {
+            updatedProducts = updatedProducts.map((p) =>
+              p.id === comp.productId
+                ? { ...p, stock: p.stock + comp.quantity * item.qty }
+                : p
+            );
+          });
         }
-      });
-
-      return updated;
+      }
     });
 
+    // Devolver stock en Firestore
+    updatedProducts.forEach((p) => {
+      updateDoc(doc(db, 'products', p.id), { stock: p.stock });
+    });
+
+    // Ajustar deuda si era fiado
     if (saleToDelete.paymentMethod === 'Fiado') {
-      setClients((prevClients) =>
-        prevClients.map((c) =>
-          c.name === saleToDelete.client
-            ? { ...c, debt: Math.max(0, c.debt - saleToDelete.total) }
-            : c
-        )
-      );
+      const clientObj = clients.find((c) => c.name === saleToDelete.client);
+      if (clientObj) {
+        updateDoc(doc(db, 'clients', clientObj.id), {
+          debt: Math.max(0, clientObj.debt - saleToDelete.total)
+        });
+      }
     }
 
-    setSales((prevSales) => prevSales.filter((s) => s.id !== saleId));
+    await deleteDoc(doc(db, 'sales', saleId));
     setSaleToDeleteConfirm(null);
     notify(`🗑️ Venta ${saleToDelete.id} eliminada.`);
   };
 
-  const handleDeleteClient = (clientId) => {
+  const handleDeleteClient = async (clientId) => {
     const clientToDelete = clients.find((c) => c.id === clientId);
     if (!clientToDelete) return;
 
@@ -435,25 +470,27 @@ export default function BusinessManagerApp() {
       setSelectedClient('Cliente Casual');
     }
 
-    setClients((prev) => prev.filter((c) => c.id !== clientId));
+    await deleteDoc(doc(db, 'clients', clientId));
     notify(`🗑️ Cliente "${clientToDelete.name}" eliminado`);
   };
 
-  const handleAdjustStock = (productId, delta) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === productId ? { ...p, stock: Math.max(0, p.stock + delta) } : p))
-    );
+  const handleAdjustStock = async (productId, delta) => {
+    const prod = products.find((p) => p.id === productId);
+    if (!prod) return;
+    const newStock = Math.max(0, prod.stock + delta);
+
+    await updateDoc(doc(db, 'products', productId), { stock: newStock });
     notify('📦 Stock actualizado');
   };
 
-  const handleDeleteProduct = (productId) => {
+  const handleDeleteProduct = async (productId) => {
     const prod = products.find((p) => p.id === productId);
-    setProducts((prev) => prev.filter((p) => p.id !== productId));
+    await deleteDoc(doc(db, 'products', productId));
     setSaleCart((prev) => prev.filter((item) => item.id !== productId));
     notify(`🗑️ ${prod ? prod.name : 'Producto'} eliminado`);
   };
 
-  const handleAddProduct = (e) => {
+  const handleAddProduct = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const newP = {
@@ -466,37 +503,33 @@ export default function BusinessManagerApp() {
       stock: parseInt(fd.get('stock'), 10),
       minStock: parseInt(fd.get('minStock'), 10),
     };
-    setProducts([...products, newP]);
+
+    await setDoc(doc(db, 'products', newP.id), newP);
     setShowProductModal(false);
     notify('✨ Producto añadido al catálogo');
   };
 
-  const handleUpdateProduct = (e) => {
+  const handleUpdateProduct = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const newCost = parseFloat(fd.get('costPrice'));
     const newSell = parseFloat(fd.get('sellPrice'));
 
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === editingProduct.id
-          ? {
-              ...p,
-              name: fd.get('name'),
-              brand: fd.get('brand'),
-              category: fd.get('category'),
-              costPrice: isNaN(newCost) ? p.costPrice : newCost,
-              sellPrice: isNaN(newSell) ? p.sellPrice : newSell,
-              minStock: parseInt(fd.get('minStock'), 10) || p.minStock
-            }
-          : p
-      )
-    );
+    const updatedData = {
+      name: fd.get('name'),
+      brand: fd.get('brand'),
+      category: fd.get('category'),
+      costPrice: isNaN(newCost) ? editingProduct.costPrice : newCost,
+      sellPrice: isNaN(newSell) ? editingProduct.sellPrice : newSell,
+      minStock: parseInt(fd.get('minStock'), 10) || editingProduct.minStock
+    };
+
+    await updateDoc(doc(db, 'products', editingProduct.id), updatedData);
     setEditingProduct(null);
     notify('✏️ Precios y datos actualizados');
   };
 
-  const handleAddPromo = (e) => {
+  const handleAddPromo = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const newPromo = {
@@ -508,47 +541,41 @@ export default function BusinessManagerApp() {
       description: fd.get('description'),
       items: []
     };
-    setPromos([...promos, newPromo]);
+
+    await setDoc(doc(db, 'promos', newPromo.id), newPromo);
     setShowPromoModal(false);
     notify(`🎉 Promoción "${newPromo.name}" creada`);
   };
 
-  const handleDeletePromo = (promoId) => {
-    const promo = promos.find((p) => p.id === promoId);
-    setPromos((prev) => prev.filter((p) => p.id !== promoId));
+  const handleDeletePromo = async (promoId) => {
+    await deleteDoc(doc(db, 'promos', promoId));
     setSaleCart((prev) => prev.filter((item) => item.id !== promoId));
     notify(`🗑️ Promoción eliminada`);
   };
 
-  const handleUpdatePromo = (e) => {
+  const handleUpdatePromo = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const newPrice = parseFloat(fd.get('price'));
 
-    setPromos((prev) =>
-      prev.map((p) =>
-        p.id === editingPromo.id
-          ? {
-              ...p,
-              name: fd.get('name'),
-              type: fd.get('type'),
-              price: isNaN(newPrice) ? p.price : newPrice,
-              description: fd.get('description')
-            }
-          : p
-      )
-    );
+    const updatedData = {
+      name: fd.get('name'),
+      type: fd.get('type'),
+      price: isNaN(newPrice) ? editingPromo.price : newPrice,
+      description: fd.get('description')
+    };
+
+    await updateDoc(doc(db, 'promos', editingPromo.id), updatedData);
     setEditingPromo(null);
     notify('✏️ Promoción actualizada');
   };
 
-  const togglePromoActive = (id) => {
-    setPromos((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, active: !p.active } : p))
-    );
+  const togglePromoActive = async (id) => {
+    const promo = promos.find((p) => p.id === id);
+    if (!promo) return;
+    await updateDoc(doc(db, 'promos', id), { active: !promo.active });
   };
 
-  // --- PANTALLA DE CARGA INICIAL (Previene que se vea la web sin diseño) ---
   if (!isReady) {
     return (
       <div style={{ backgroundColor: '#020617', color: '#f8fafc', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
@@ -556,7 +583,7 @@ export default function BusinessManagerApp() {
           <div style={{ width: '40px', height: '40px', border: '4px solid #334155', borderTopColor: '#d946ef', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: '0 0 4px' }}>Benga Drinks</h2>
-          <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>Cargando sistema...</p>
+          <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>Conectando con Cloud Firestore...</p>
         </div>
       </div>
     );
@@ -1070,8 +1097,8 @@ export default function BusinessManagerApp() {
 
                   {c.debt > 0 && (
                     <button
-                      onClick={() => {
-                        setClients(prev => prev.map(cli => cli.id === c.id ? { ...cli, debt: 0 } : cli));
+                      onClick={async () => {
+                        await updateDoc(doc(db, 'clients', c.id), { debt: 0 });
                         notify(`Deuda saldada para ${c.name}`);
                       }}
                       className="w-full bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30 py-2.5 rounded-2xl text-xs font-bold transition"
@@ -1376,10 +1403,11 @@ export default function BusinessManagerApp() {
               <h3 className="font-bold text-base text-white">Nuevo Cliente</h3>
               <button onClick={() => setShowClientModal(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
             </div>
-            <form onSubmit={(e) => {
+            <form onSubmit={async (e) => {
               e.preventDefault();
               const fd = new FormData(e.target);
-              setClients([...clients, { id: `cli-${Date.now()}`, name: fd.get('name'), phone: fd.get('phone'), debt: 0 }]);
+              const newClient = { id: `cli-${Date.now()}`, name: fd.get('name'), phone: fd.get('phone'), debt: 0 };
+              await setDoc(doc(db, 'clients', newClient.id), newClient);
               setShowClientModal(false);
               notify('Cliente registrado');
             }} className="space-y-3 text-xs">
