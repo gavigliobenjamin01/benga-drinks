@@ -66,78 +66,6 @@ const formatDate = (isoString) => {
   });
 };
 
-// --- DATOS INICIALES (Para la primera carga automática) ---
-const INITIAL_PRODUCTS = [
-  { id: 'p1', name: 'Fernet Branca 750ml', category: 'Aperitivos', brand: 'Branca', costPrice: 7200, sellPrice: 10500, stock: 18, minStock: 8 },
-  { id: 'p2', name: 'Coca-Cola 2.25L', category: 'Gaseosas', brand: 'Coca-Cola', costPrice: 1900, sellPrice: 2900, stock: 42, minStock: 15 },
-  { id: 'p3', name: 'Bolsa de Hielo Rolo 4kg', category: 'Insumos', brand: 'Hielo Puro', costPrice: 700, sellPrice: 1600, stock: 25, minStock: 10 },
-  { id: 'p4', name: 'Gin Bombay Sapphire 750ml', category: 'Destilados', brand: 'Bombay', costPrice: 18500, sellPrice: 26500, stock: 5, minStock: 4 },
-  { id: 'p5', name: 'Agua Tónica Paso de los Toros 1.5L', category: 'Gaseosas', brand: 'Paso de los Toros', costPrice: 1200, sellPrice: 2100, stock: 30, minStock: 10 },
-  { id: 'p6', name: 'Cerveza Stella Artois 730ml', category: 'Cervezas', brand: 'Stella Artois', costPrice: 1800, sellPrice: 2700, stock: 6, minStock: 12 },
-];
-
-const INITIAL_PROMOS = [
-  {
-    id: 'pr1',
-    name: 'Combo Fernetero Clásico',
-    type: 'pack',
-    price: 15500,
-    active: true,
-    description: '1 Fernet Branca 750ml + 2 Coca-Cola 2.25L + 1 Bolsa de Hielo',
-    items: [
-      { productId: 'p1', quantity: 1, name: 'Fernet Branca 750ml' },
-      { productId: 'p2', quantity: 2, name: 'Coca-Cola 2.25L' },
-      { productId: 'p3', quantity: 1, name: 'Bolsa de Hielo 4kg' }
-    ]
-  },
-  {
-    id: 'pr2',
-    name: 'Descuento Gin Tonic 10% OFF',
-    type: 'discount',
-    price: 27000,
-    active: true,
-    description: 'Pack Gin Bombay + 2 Tónicas con 10% de descuento aplicado',
-    items: [
-      { productId: 'p4', quantity: 1, name: 'Gin Bombay Sapphire 750ml' },
-      { productId: 'p5', quantity: 2, name: 'Agua Tónica 1.5L' }
-    ]
-  }
-];
-
-const INITIAL_CLIENTS = [
-  { id: 'cli1', name: 'Bar La Previa', phone: '+54 9 11 4522-9988', debt: 31500 },
-  { id: 'cli2', name: 'Eventos Quinta Las Lilas', phone: '+54 9 11 3200-7711', debt: 0 }
-];
-
-const INITIAL_SALES = [
-  {
-    id: 'V-101',
-    date: new Date().toISOString(),
-    client: 'Cliente Casual',
-    paymentMethod: 'Efectivo',
-    total: 15000,
-    cost: 9800,
-    profit: 5200,
-    items: [
-      { id: 'p1', name: 'Fernet Branca 750ml', qty: 1, price: 10500, type: 'product', raw: INITIAL_PRODUCTS[0] },
-      { id: 'p2', name: 'Coca-Cola 2.25L', qty: 1, price: 2900, type: 'product', raw: INITIAL_PRODUCTS[1] },
-      { id: 'p3', name: 'Bolsa de Hielo Rolo 4kg', qty: 1, price: 1600, type: 'product', raw: INITIAL_PRODUCTS[2] }
-    ]
-  },
-  {
-    id: 'V-102',
-    date: new Date(Date.now() - 3600000 * 3).toISOString(),
-    client: 'Bar La Previa',
-    paymentMethod: 'Fiado',
-    total: 31500,
-    cost: 21600,
-    profit: 9900,
-    items: [
-      { id: 'p1', name: 'Fernet Branca 750ml', qty: 3, price: 10500, type: 'product', raw: INITIAL_PRODUCTS[0] }
-    ]
-  }
-];
-
 export default function BusinessManagerApp() {
   const [isReady, setIsReady] = useState(false);
 
@@ -169,40 +97,24 @@ export default function BusinessManagerApp() {
   const [sales, setSales] = useState([]);
   const [clients, setClients] = useState([]);
 
-  // --- ESCUCHA DE FIRESTORE EN TIEMPO REAL CON AUTOCARGADO ---
+  // --- ESCUCHA DE FIRESTORE EN TIEMPO REAL (SIN REINICIO AUTOMÁTICO) ---
   useEffect(() => {
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
-      if (snapshot.empty) {
-        INITIAL_PRODUCTS.forEach((p) => setDoc(doc(db, 'products', p.id), p));
-      } else {
-        setProducts(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
-      }
+      setProducts(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
     });
 
     const unsubPromos = onSnapshot(collection(db, 'promos'), (snapshot) => {
-      if (snapshot.empty) {
-        INITIAL_PROMOS.forEach((p) => setDoc(doc(db, 'promos', p.id), p));
-      } else {
-        setPromos(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
-      }
+      setPromos(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
     });
 
     const unsubClients = onSnapshot(collection(db, 'clients'), (snapshot) => {
-      if (snapshot.empty) {
-        INITIAL_CLIENTS.forEach((c) => setDoc(doc(db, 'clients', c.id), c));
-      } else {
-        setClients(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
-      }
+      setClients(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
     });
 
     const unsubSales = onSnapshot(collection(db, 'sales'), (snapshot) => {
-      if (snapshot.empty) {
-        INITIAL_SALES.forEach((s) => setDoc(doc(db, 'sales', s.id), s));
-      } else {
-        const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
-        list.sort((a, b) => new Date(b.date) - new Date(a.date));
-        setSales(list);
-      }
+      const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
+      list.sort((a, b) => new Date(b.date) - new Date(a.date));
+      setSales(list);
     });
 
     return () => {
