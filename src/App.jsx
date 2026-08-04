@@ -36,8 +36,7 @@ import {
   Wallet,
   PieChart,
   ShieldCheck,
-  HandCoins,
-  ArrowDownRight
+  HandCoins
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
@@ -115,6 +114,13 @@ export default function BusinessManagerApp() {
   const [stockEntries, setStockEntries] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
 
+  // --- ESTADOS PARA SISTEMA DE LAS 3 CAJAS Y RETIRO DE PLATA ---
+  const [showBoxesModal, setShowBoxesModal] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [salaryPercentage, setSalaryPercentage] = useState(50);
+  const [withdrawInput, setWithdrawInput] = useState('');
+  const [withdrawNote, setWithdrawNote] = useState('');
+
   // --- ESCUCHA DE FIRESTORE EN TIEMPO REAL ---
   useEffect(() => {
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
@@ -147,6 +153,16 @@ export default function BusinessManagerApp() {
       setWithdrawals(list);
     });
 
+    // Guardado y carga persistente de la configuración (Porcentaje de Sueldo)
+    const unsubSettings = onSnapshot(doc(db, 'settings', 'config'), (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data.salaryPercentage !== undefined) {
+          setSalaryPercentage(data.salaryPercentage);
+        }
+      }
+    });
+
     return () => {
       unsubProducts();
       unsubPromos();
@@ -154,8 +170,14 @@ export default function BusinessManagerApp() {
       unsubSales();
       unsubStockEntries();
       unsubWithdrawals();
+      unsubSettings();
     };
   }, []);
+
+  const handleSalaryPercentageChange = async (newVal) => {
+    setSalaryPercentage(newVal);
+    await setDoc(doc(db, 'settings', 'config'), { salaryPercentage: newVal }, { merge: true });
+  };
 
   const [saleCart, setSaleCart] = useState([]);
   const [selectedClient, setSelectedClient] = useState('Cliente Casual');
@@ -177,13 +199,6 @@ export default function BusinessManagerApp() {
   const [saleToPayModal, setSaleToPayModal] = useState(null);
   const [toast, setToast] = useState(null);
 
-  // --- ESTADOS PARA SISTEMA DE LAS 3 CAJAS Y RETIRO DE PLATA ---
-  const [showBoxesModal, setShowBoxesModal] = useState(false);
-  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
-  const [salaryPercentage, setSalaryPercentage] = useState(50);
-  const [withdrawInput, setWithdrawInput] = useState('');
-  const [withdrawNote, setWithdrawNote] = useState('');
-
   const [promoItems, setPromoItems] = useState([]);
   const [promoDescription, setPromoDescription] = useState('');
   const [selectedProdForPromo, setSelectedProdForPromo] = useState('');
@@ -204,7 +219,7 @@ export default function BusinessManagerApp() {
     const lowStockCount = products.filter((p) => p.stock <= p.minStock).length;
     const stockValuation = products.reduce((acc, p) => acc + p.costPrice * p.stock, 0);
 
-    // Métricas de Retiros
+    // Cálculo estricto de ganancias personales
     const totalSalaryProfit = Math.max(0, netProfit * (salaryPercentage / 100));
     const totalWithdrawn = withdrawals.reduce((acc, w) => acc + (w.amount || 0), 0);
     const availableToWithdraw = Math.max(0, totalSalaryProfit - totalWithdrawn);
@@ -417,7 +432,6 @@ export default function BusinessManagerApp() {
     notify(`📦 Ingreso de mercadería registrado (${formatCurrency(costVal)}) y stock actualizado`);
   };
 
-  // --- REGISTRAR RETIRO DE GANANCIA/SUELDO ---
   const handleRegisterWithdrawal = async (e) => {
     e.preventDefault();
     const amount = parseFloat(withdrawInput) || 0;
@@ -1058,7 +1072,6 @@ export default function BusinessManagerApp() {
               </div>
             </div>
 
-            {/* SE REMOVIÓ PENDIENTE EN FIADOS Y SE PUSO RETIRO DE PLATA */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <KpiCard
                 title="Ingresos Totales (Netos)"
@@ -1176,7 +1189,6 @@ export default function BusinessManagerApp() {
               </div>
 
               <div className="flex items-center gap-3">
-                {/* BOTÓN / INDICADOR DE RETIRO DE PLATA EN INVENTARIO */}
                 <button
                   onClick={() => setShowWithdrawModal(true)}
                   className="bg-slate-900/90 hover:bg-slate-800 border border-emerald-500/40 px-4 py-2 rounded-2xl text-xs text-left transition-all shadow-lg"
@@ -1551,7 +1563,6 @@ export default function BusinessManagerApp() {
               </button>
             </div>
 
-            {/* ESTADO DE SALDOS */}
             <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-3">
               <div className="flex justify-between text-xs text-slate-300">
                 <span>Tu Sueldo Asignado ({salaryPercentage}% de Ganancia):</span>
@@ -1567,7 +1578,6 @@ export default function BusinessManagerApp() {
               </div>
             </div>
 
-            {/* FORMULARIO DE RETIRO CON CONTROL ESTRICTO */}
             <form onSubmit={handleRegisterWithdrawal} className="space-y-4">
               <div>
                 <label className="text-xs text-slate-300 block mb-1.5 font-bold">
@@ -1619,7 +1629,6 @@ export default function BusinessManagerApp() {
               </button>
             </form>
 
-            {/* HISTORIAL DE RETIROS */}
             <div className="pt-3 border-t border-slate-800 space-y-2">
               <span className="text-xs font-bold text-slate-400 block uppercase">Historial de Retiros Realizados</span>
               <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
@@ -1725,7 +1734,7 @@ export default function BusinessManagerApp() {
                   max="100"
                   step="5"
                   value={salaryPercentage}
-                  onChange={(e) => setSalaryPercentage(Number(e.target.value))}
+                  onChange={(e) => handleSalaryPercentageChange(Number(e.target.value))}
                   className="w-full accent-fuchsia-500 bg-slate-800 rounded-lg cursor-pointer h-2"
                 />
               </div>
