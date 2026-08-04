@@ -24,7 +24,7 @@ import {
   Pencil
 } from 'lucide-react';
 
-// --- CARGA INMEDIATA DE TAILWIND CDN (Evita parpadeos sin estilo) ---
+// --- INYECCIÓN INMEDIATA DE TAILWIND ---
 if (typeof document !== 'undefined' && !document.getElementById('tailwind-cdn-script')) {
   const script = document.createElement('script');
   script.id = 'tailwind-cdn-script';
@@ -51,7 +51,7 @@ const formatDate = (isoString) => {
   });
 };
 
-// --- DATOS INICIALES DEL SISTEMA ---
+// --- DATOS INICIALES ---
 const INITIAL_PRODUCTS = [
   { id: 'p1', name: 'Fernet Branca 750ml', category: 'Aperitivos', brand: 'Branca', costPrice: 7200, sellPrice: 10500, stock: 18, minStock: 8 },
   { id: 'p2', name: 'Coca-Cola 2.25L', category: 'Gaseosas', brand: 'Coca-Cola', costPrice: 1900, sellPrice: 2900, stock: 42, minStock: 15 },
@@ -123,24 +123,19 @@ const INITIAL_SALES = [
   }
 ];
 
-// --- COMPONENTE PRINCIPAL ---
 export default function BusinessManagerApp() {
-  const [, setIsTailwindReady] = useState(() => {
-    return typeof window !== 'undefined' && !!window.tailwind;
-  });
+  // Estado para forzar refresco automático y aplicar los estilos sin intervención del usuario
+  const [, setForceRender] = useState(0);
 
   useEffect(() => {
-    const script = document.getElementById('tailwind-cdn-script');
-    if (!script) return;
-
-    const handleLoad = () => setIsTailwindReady(true);
-
-    if (window.tailwind) {
-      setIsTailwindReady(true);
-    } else {
-      script.addEventListener('load', handleLoad);
-      return () => script.removeEventListener('load', handleLoad);
-    }
+    const t1 = setTimeout(() => setForceRender(1), 100);
+    const t2 = setTimeout(() => setForceRender(2), 500);
+    const t3 = setTimeout(() => setForceRender(3), 1000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
   }, []);
 
   const [activeTab, setActiveTab] = useState('sales');
@@ -552,7 +547,15 @@ export default function BusinessManagerApp() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row antialiased">
+    <div 
+      style={{ backgroundColor: '#020617', color: '#f8fafc', minHeight: '100vh' }} 
+      className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row antialiased"
+    >
+      {/* Regla CSS directa para evitar el pantallazo blanco inicial */}
+      <style>{`
+        body { background-color: #020617 !important; color: #f8fafc !important; margin: 0; }
+      `}</style>
+
       {toast && (
         <div className="fixed top-5 right-5 z-[100] bg-fuchsia-500 text-slate-950 px-4 py-3 rounded-2xl font-bold shadow-2xl shadow-fuchsia-500/40 flex items-center gap-2 animate-bounce">
           <Check className="w-5 h-5 stroke-[3]" />
@@ -560,7 +563,7 @@ export default function BusinessManagerApp() {
         </div>
       )}
 
-      <aside className="w-full md:w-64 bg-slate-900/90 border-r border-slate-800/80 p-5 flex flex-col justify-between backdrop-blur-md">
+      <aside style={{ backgroundColor: '#0f172a' }} className="w-full md:w-64 bg-slate-900/90 border-r border-slate-800/80 p-5 flex flex-col justify-between backdrop-blur-md">
         <div className="space-y-6">
           <div className="flex items-center gap-3 px-2">
             <div className="bg-gradient-to-tr from-fuchsia-600 to-purple-500 p-2.5 rounded-2xl text-slate-950 font-bold shadow-lg shadow-fuchsia-500/25">
@@ -592,7 +595,7 @@ export default function BusinessManagerApp() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-950">
+      <main style={{ backgroundColor: '#020617' }} className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-950">
         {activeTab === 'sales' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-7 space-y-5">
