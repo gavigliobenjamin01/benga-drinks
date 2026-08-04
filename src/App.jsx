@@ -35,7 +35,9 @@ import {
   PackagePlus,
   Wallet,
   PieChart,
-  ShieldCheck
+  ShieldCheck,
+  HandCoins,
+  ArrowDownRight
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
@@ -70,7 +72,6 @@ const formatDate = (isoString) => {
   });
 };
 
-// Función para formatear la descripción del combo automáticamente
 const formatPromoDescription = (itemsArr, productsList) => {
   if (!itemsArr || itemsArr.length === 0) return '';
   return itemsArr
@@ -85,7 +86,6 @@ const formatPromoDescription = (itemsArr, productsList) => {
 export default function BusinessManagerApp() {
   const [isReady, setIsReady] = useState(false);
 
-  // Carga e inyección dinámica de Tailwind CSS
   useEffect(() => {
     const checkTailwind = () => {
       if (window.tailwind) {
@@ -113,6 +113,7 @@ export default function BusinessManagerApp() {
   const [sales, setSales] = useState([]);
   const [clients, setClients] = useState([]);
   const [stockEntries, setStockEntries] = useState([]);
+  const [withdrawals, setWithdrawals] = useState([]);
 
   // --- ESCUCHA DE FIRESTORE EN TIEMPO REAL ---
   useEffect(() => {
@@ -140,12 +141,19 @@ export default function BusinessManagerApp() {
       setStockEntries(list);
     });
 
+    const unsubWithdrawals = onSnapshot(collection(db, 'withdrawals'), (snapshot) => {
+      const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
+      list.sort((a, b) => new Date(b.date) - new Date(a.date));
+      setWithdrawals(list);
+    });
+
     return () => {
       unsubProducts();
       unsubPromos();
       unsubClients();
       unsubSales();
       unsubStockEntries();
+      unsubWithdrawals();
     };
   }, []);
 
@@ -154,11 +162,8 @@ export default function BusinessManagerApp() {
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('Todas');
-  
-  // --- ESTADO PARA FILTRO POR CATEGORÍA EN EL INVENTARIO ---
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('Todas');
 
-  // --- ESTADOS PARA INGRESO DE MERCADERÍA ---
   const [entryCart, setEntryCart] = useState([]);
   const [entrySearchTerm, setEntrySearchTerm] = useState('');
   const [entryTotalCostInput, setEntryTotalCostInput] = useState('');
@@ -172,11 +177,13 @@ export default function BusinessManagerApp() {
   const [saleToPayModal, setSaleToPayModal] = useState(null);
   const [toast, setToast] = useState(null);
 
-  // --- ESTADOS PARA SISTEMA DE LAS 3 CAJAS ---
+  // --- ESTADOS PARA SISTEMA DE LAS 3 CAJAS Y RETIRO DE PLATA ---
   const [showBoxesModal, setShowBoxesModal] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [salaryPercentage, setSalaryPercentage] = useState(50);
+  const [withdrawInput, setWithdrawInput] = useState('');
+  const [withdrawNote, setWithdrawNote] = useState('');
 
-  // --- ESTADOS PARA GESTIÓN DE PRODUCTOS EN PROMO ---
   const [promoItems, setPromoItems] = useState([]);
   const [promoDescription, setPromoDescription] = useState('');
   const [selectedProdForPromo, setSelectedProdForPromo] = useState('');
@@ -197,22 +204,36 @@ export default function BusinessManagerApp() {
     const lowStockCount = products.filter((p) => p.stock <= p.minStock).length;
     const stockValuation = products.reduce((acc, p) => acc + p.costPrice * p.stock, 0);
 
-    return { totalRevenue, totalCost: totalSalesCost, netProfit, totalPendingDebt, lowStockCount, stockValuation, merchandiseExpenses, rawRevenue };
-  }, [sales, clients, products, stockEntries]);
+    // Métricas de Retiros
+    const totalSalaryProfit = Math.max(0, netProfit * (salaryPercentage / 100));
+    const totalWithdrawn = withdrawals.reduce((acc, w) => acc + (w.amount || 0), 0);
+    const availableToWithdraw = Math.max(0, totalSalaryProfit - totalWithdrawn);
 
-  // Categorías para Registrar Venta
+    return {
+      totalRevenue,
+      totalCost: totalSalesCost,
+      netProfit,
+      totalPendingDebt,
+      lowStockCount,
+      stockValuation,
+      merchandiseExpenses,
+      rawRevenue,
+      totalSalaryProfit,
+      totalWithdrawn,
+      availableToWithdraw
+    };
+  }, [sales, clients, products, stockEntries, withdrawals, salaryPercentage]);
+
   const categories = useMemo(() => {
     const prodCats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
     return ['Todas', 'Promociones', ...prodCats];
   }, [products]);
 
-  // Categorías exclusivas para el Inventario
   const inventoryCategories = useMemo(() => {
     const prodCats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
     return ['Todas', ...prodCats];
   }, [products]);
 
-  // INVENTARIO FILTRADO POR GRUPO Y ORDENADO ALFABÉTICAMENTE
   const sortedAndFilteredInventory = useMemo(() => {
     let list = products;
     if (inventoryCategoryFilter !== 'Todas') {
@@ -223,7 +244,6 @@ export default function BusinessManagerApp() {
     );
   }, [products, inventoryCategoryFilter]);
 
-  // ÍTEMS DISPONIBLES EN REGISTRAR VENTA
   const availableItems = useMemo(() => {
     let items = [];
 
@@ -341,7 +361,6 @@ export default function BusinessManagerApp() {
     }, 0);
   }, [saleCart, products]);
 
-  // --- MÉTODOS PARA INGRESO DE MERCADERÍA ---
   const addToEntryCart = (product) => {
     setEntryCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
@@ -398,7 +417,41 @@ export default function BusinessManagerApp() {
     notify(`📦 Ingreso de mercadería registrado (${formatCurrency(costVal)}) y stock actualizado`);
   };
 
-  // --- MÉTODOS AUXILIARES PARA PROMOS ---
+  // --- REGISTRAR RETIRO DE GANANCIA/SUELDO ---
+  const handleRegisterWithdrawal = async (e) => {
+    e.preventDefault();
+    const amount = parseFloat(withdrawInput) || 0;
+
+    if (amount <= 0) {
+      notify('⚠️ Ingresá un monto válido a retirar.');
+      return;
+    }
+
+    if (amount > metrics.availableToWithdraw) {
+      notify(`⛔ No podés retirar más de tu ganancia disponible (${formatCurrency(metrics.availableToWithdraw)})`);
+      return;
+    }
+
+    const newWithdrawal = {
+      id: `RET-${Date.now().toString().slice(-4)}`,
+      date: new Date().toISOString(),
+      amount,
+      note: withdrawNote || 'Retiro de sueldo personal'
+    };
+
+    await setDoc(doc(db, 'withdrawals', newWithdrawal.id), newWithdrawal);
+
+    setWithdrawInput('');
+    setWithdrawNote('');
+    setShowWithdrawModal(false);
+    notify(`💸 Retiraste ${formatCurrency(amount)} de tu ganancia personal`);
+  };
+
+  const handleDeleteWithdrawal = async (withdrawId) => {
+    await deleteDoc(doc(db, 'withdrawals', withdrawId));
+    notify('🗑️ Retiro devuelto al saldo disponible');
+  };
+
   const handleUpdatePromoItems = (newItems) => {
     setPromoItems(newItems);
     setPromoDescription(formatPromoDescription(newItems, products));
@@ -450,8 +503,6 @@ export default function BusinessManagerApp() {
     setPromoDescription(promo.description || formatPromoDescription(initialItems, products));
     setSelectedProdForPromo('');
   };
-
-  // --- OPERACIONES EN FIRESTORE ---
 
   const handleRegisterSale = async () => {
     if (saleCart.length === 0) return;
@@ -991,16 +1042,23 @@ export default function BusinessManagerApp() {
                 <p className="text-xs text-slate-400">Estado general de ingresos, ganancias e historial</p>
               </div>
 
-              {/* BOTÓN PARA ABRIR SISTEMA DE LAS 3 CAJAS */}
-              <button
-                onClick={() => setShowBoxesModal(true)}
-                className="bg-gradient-to-r from-fuchsia-500 to-purple-600 hover:from-fuchsia-400 hover:to-purple-500 text-slate-950 font-extrabold px-4 py-2.5 rounded-2xl text-xs flex items-center gap-2 shadow-lg shadow-fuchsia-500/25 transition-all transform hover:scale-[1.02]"
-              >
-                <Wallet className="w-4 h-4 text-slate-950" /> Ver Desglose de Cajas (3 Cajas)
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowWithdrawModal(true)}
+                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold px-4 py-2.5 rounded-2xl text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all transform hover:scale-[1.02]"
+                >
+                  <HandCoins className="w-4 h-4 text-slate-950" /> Retirar Plata (Sueldo)
+                </button>
+                <button
+                  onClick={() => setShowBoxesModal(true)}
+                  className="bg-gradient-to-r from-fuchsia-500 to-purple-600 hover:from-fuchsia-400 hover:to-purple-500 text-slate-950 font-extrabold px-4 py-2.5 rounded-2xl text-xs flex items-center gap-2 shadow-lg shadow-fuchsia-500/25 transition-all transform hover:scale-[1.02]"
+                >
+                  <Wallet className="w-4 h-4 text-slate-950" /> Cajas (3 Cajas)
+                </button>
+              </div>
             </div>
 
-            {/* CADA CUADRADO ES TOCABLE PARA ABRIR EL DESGLOSE */}
+            {/* SE REMOVIÓ PENDIENTE EN FIADOS Y SE PUSO RETIRO DE PLATA */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <KpiCard
                 title="Ingresos Totales (Netos)"
@@ -1017,11 +1075,11 @@ export default function BusinessManagerApp() {
                 hint="Toca para ver Cajas"
               />
               <KpiCard
-                title="Pendiente en Fiados"
-                value={formatCurrency(metrics.totalPendingDebt)}
-                icon={<Users className="text-amber-400" />}
-                onClick={() => setShowBoxesModal(true)}
-                hint="Toca para ver Cajas"
+                title="Retiro de Plata (Disponible)"
+                value={formatCurrency(metrics.availableToWithdraw)}
+                icon={<HandCoins className="text-emerald-400" />}
+                onClick={() => setShowWithdrawModal(true)}
+                hint="Toca para retirar sueldo"
               />
               <KpiCard
                 title="Productos Bajo Stock"
@@ -1108,6 +1166,7 @@ export default function BusinessManagerApp() {
           </div>
         )}
 
+        {/* PESTAÑA: INVENTARIO Y STOCK */}
         {activeTab === 'inventory' && (
           <div className="space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1117,6 +1176,19 @@ export default function BusinessManagerApp() {
               </div>
 
               <div className="flex items-center gap-3">
+                {/* BOTÓN / INDICADOR DE RETIRO DE PLATA EN INVENTARIO */}
+                <button
+                  onClick={() => setShowWithdrawModal(true)}
+                  className="bg-slate-900/90 hover:bg-slate-800 border border-emerald-500/40 px-4 py-2 rounded-2xl text-xs text-left transition-all shadow-lg"
+                >
+                  <span className="text-emerald-400 block text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                    <HandCoins className="w-3.5 h-3.5" /> Retiro de Plata (Disponible)
+                  </span>
+                  <span className="text-white font-mono font-bold text-sm block mt-0.5">
+                    {formatCurrency(metrics.availableToWithdraw)}
+                  </span>
+                </button>
+
                 <div className="bg-slate-900/90 border border-slate-800 px-4 py-2 rounded-2xl text-xs">
                   <span className="text-slate-400 block text-[10px] font-medium uppercase tracking-wider">Capital en Stock (Costo)</span>
                   <span className="text-fuchsia-400 font-mono font-bold text-sm block">
@@ -1463,6 +1535,122 @@ export default function BusinessManagerApp() {
         )}
       </main>
 
+      {/* --- MODAL PARA RETIRO DE PLATA (SOLO GANANCIA/SUELDO) --- */}
+      {showWithdrawModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-base text-white flex items-center gap-2">
+                  <HandCoins className="w-5 h-5 text-emerald-400" /> Retiro de Plata (Sueldo Personal)
+                </h3>
+                <p className="text-[11px] text-slate-400">Solo podés retirar la plata que te corresponde como ganancia</p>
+              </div>
+              <button onClick={() => setShowWithdrawModal(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* ESTADO DE SALDOS */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-3">
+              <div className="flex justify-between text-xs text-slate-300">
+                <span>Tu Sueldo Asignado ({salaryPercentage}% de Ganancia):</span>
+                <strong className="font-mono text-fuchsia-400">{formatCurrency(metrics.totalSalaryProfit)}</strong>
+              </div>
+              <div className="flex justify-between text-xs text-slate-300">
+                <span>Total Ya Retirado:</span>
+                <strong className="font-mono text-amber-400">-{formatCurrency(metrics.totalWithdrawn)}</strong>
+              </div>
+              <div className="pt-2 border-t border-slate-800 flex justify-between items-center">
+                <span className="text-xs font-bold text-white uppercase">Disponible para Retirar:</span>
+                <span className="font-mono font-bold text-xl text-emerald-400">{formatCurrency(metrics.availableToWithdraw)}</span>
+              </div>
+            </div>
+
+            {/* FORMULARIO DE RETIRO CON CONTROL ESTRICTO */}
+            <form onSubmit={handleRegisterWithdrawal} className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-300 block mb-1.5 font-bold">
+                  Monto a retirar ($):
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-2.5 text-emerald-400 font-bold">$</span>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    placeholder={`Máximo ${metrics.availableToWithdraw}...`}
+                    value={withdrawInput}
+                    onChange={(e) => setWithdrawInput(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-2.5 text-sm text-white font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                {parseFloat(withdrawInput) > metrics.availableToWithdraw && (
+                  <p className="text-[11px] text-red-400 font-bold mt-1.5 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" /> No podés retirar más de lo que te corresponde como ganancia.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-300 block mb-1.5 font-medium">
+                  Motivo / Nota (opcional):
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Sueldo semana, gastos personales, etc."
+                  value={withdrawNote}
+                  onChange={(e) => setWithdrawNote(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={
+                  !withdrawInput ||
+                  parseFloat(withdrawInput) <= 0 ||
+                  parseFloat(withdrawInput) > metrics.availableToWithdraw
+                }
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3.5 rounded-2xl transition shadow-lg shadow-emerald-500/20 disabled:bg-slate-800 disabled:text-slate-600 disabled:shadow-none flex items-center justify-center gap-2"
+              >
+                <Check className="w-5 h-5 stroke-[3]" /> Registrar Retiro de Plata
+              </button>
+            </form>
+
+            {/* HISTORIAL DE RETIROS */}
+            <div className="pt-3 border-t border-slate-800 space-y-2">
+              <span className="text-xs font-bold text-slate-400 block uppercase">Historial de Retiros Realizados</span>
+              <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                {withdrawals.length === 0 ? (
+                  <p className="text-[11px] text-slate-500 text-center py-3">No registraste retiros todavía.</p>
+                ) : (
+                  withdrawals.map((w) => (
+                    <div key={w.id} className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 flex items-center justify-between text-xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-emerald-400">{formatCurrency(w.amount)}</span>
+                          <span className="text-[10px] text-slate-400">{w.note}</span>
+                        </div>
+                        <span className="text-[9px] text-slate-500 font-mono block">{formatDate(w.date)}</span>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteWithdrawal(w.id)}
+                        title="Cancelar / Borrar este retiro"
+                        className="text-red-400 hover:text-red-300 p-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- MODAL DE LAS 3 CAJAS DEL NEGOCIO --- */}
       {showBoxesModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1546,7 +1734,7 @@ export default function BusinessManagerApp() {
                 <div className="bg-slate-900 p-3 rounded-xl border border-fuchsia-500/20 text-center">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold block">Tu Sueldo / Retiro</span>
                   <span className="font-mono font-bold text-lg text-fuchsia-400 block mt-0.5">
-                    {formatCurrency(metrics.netProfit * (salaryPercentage / 100))}
+                    {formatCurrency(metrics.totalSalaryProfit)}
                   </span>
                 </div>
                 <div className="bg-slate-900 p-3 rounded-xl border border-purple-500/20 text-center">
@@ -2031,7 +2219,6 @@ function SidebarBtn({ active, onClick, icon, children, badge }) {
   );
 }
 
-// COMPONENTE KPI CARD ACTUALIZADO PARA ACEPTAR ONCLICK Y HINT
 function KpiCard({ title, value, icon, onClick, hint }) {
   return (
     <div
