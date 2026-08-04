@@ -1375,4 +1375,3 @@ function KpiCard({ title, value, icon }) {
       <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800/80 shadow">{icon}</div>
     </div>
   );
-}
