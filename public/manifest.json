@@ -1,0 +1,21 @@
+{
+  "short_name": "BengaDrinks",
+  "name": "Benga Drinks - Gestión de Ventas",
+  "icons": [
+    {
+      "src": "logo192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "logo512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#020617",
+  "theme_color": "#d946ef",
+  "display": "standalone",
+  "orientation": "portrait"
+}
