@@ -36,7 +36,8 @@ import {
   Wallet,
   PieChart,
   ShieldCheck,
-  HandCoins
+  HandCoins,
+  MapPin
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
@@ -182,6 +183,7 @@ export default function BusinessManagerApp() {
   const [saleCart, setSaleCart] = useState([]);
   const [selectedClient, setSelectedClient] = useState('Cliente Casual');
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
+  const [address, setAddress] = useState(''); // ESTADO PARA LA DIRECCIÓN OPCIONAL
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('Todas');
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('Todas');
@@ -557,6 +559,7 @@ export default function BusinessManagerApp() {
       date: new Date().toISOString(),
       client: selectedClient,
       paymentMethod,
+      address: address.trim() || '', // GUARDAR DIRECCIÓN SI SE ESPECIFICÓ
       total: cartTotal,
       cost: cartCostTotal,
       profit: cartTotal - cartCostTotal,
@@ -573,6 +576,7 @@ export default function BusinessManagerApp() {
     await setDoc(doc(db, 'sales', newSale.id), newSale);
 
     setSaleCart([]);
+    setAddress(''); // RESIDUAL/RESETEAR CAMPO DIRECCIÓN
     notify(
       paymentMethod === 'Fiado'
         ? `📝 Venta fiada a ${selectedClient} por ${formatCurrency(cartTotal)}`
@@ -785,7 +789,6 @@ export default function BusinessManagerApp() {
       <aside className="w-full md:w-64 bg-slate-900/90 border-r border-slate-800/80 p-5 flex flex-col justify-between backdrop-blur-md">
         <div className="space-y-6">
           <div className="flex items-center gap-3 px-2">
-            {/* Foto de tu avatar */}
             <img 
               src="/avatar.png" 
               alt="Avatar" 
@@ -1026,6 +1029,20 @@ export default function BusinessManagerApp() {
                   </div>
                 </div>
 
+                {/* NUEVO CAMPO: DIRECCIÓN (OPCIONAL) */}
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1.5 font-medium flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-fuchsia-400" /> Dirección de Entrega (Opcional):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Av. San Martín 1234, CABA"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-fuchsia-500"
+                  />
+                </div>
+
                 <div className="bg-slate-950/90 p-4 rounded-2xl border border-slate-800 flex justify-between items-center">
                   <span className="text-xs text-slate-400 font-semibold uppercase">Total a Cobrar:</span>
                   <span className="font-mono font-bold text-2xl text-fuchsia-400">
@@ -1144,6 +1161,14 @@ export default function BusinessManagerApp() {
                             </button>
                           )}
                         </div>
+
+                        {/* MUESTRA LA DIRECCIÓN SI FUE INGRESADA EN LA VENTA */}
+                        {s.address && (
+                          <div className="flex items-center gap-1 text-[11px] text-fuchsia-300 font-medium bg-slate-900 border border-fuchsia-500/30 px-2.5 py-1 rounded-xl w-fit">
+                            <MapPin className="w-3.5 h-3.5 text-fuchsia-400 shrink-0" />
+                            <span>{s.address}</span>
+                          </div>
+                        )}
 
                         {/* DETALLE DEL TICKET CON HIGHLIGHT / HOVER TOOLTIP EN COMBOS */}
                         <div className="flex flex-wrap items-center gap-1.5 pt-1">
@@ -1886,6 +1911,11 @@ export default function BusinessManagerApp() {
               <div className="flex justify-between text-slate-300">
                 <span>Cliente:</span> <strong>{saleToDeleteConfirm.client}</strong>
               </div>
+              {saleToDeleteConfirm.address && (
+                <div className="flex justify-between text-slate-300">
+                  <span>Dirección:</span> <strong className="text-slate-200">{saleToDeleteConfirm.address}</strong>
+                </div>
+              )}
               <div className="flex justify-between text-slate-300">
                 <span>Monto Venta:</span> <strong className="text-fuchsia-400">{formatCurrency(saleToDeleteConfirm.total)}</strong>
               </div>
