@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import {
   getFirestore,
@@ -122,6 +122,9 @@ export default function BusinessManagerApp() {
   const [withdrawInput, setWithdrawInput] = useState('');
   const [withdrawNote, setWithdrawNote] = useState('');
 
+  // REFERENCIA PARA AUTO SCROLL DEL CARRITO Y CONFIRMACIÓN
+  const cartEndRef = useRef(null);
+
   // --- ESCUCHA DE FIRESTORE EN TIEMPO REAL ---
   useEffect(() => {
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
@@ -204,6 +207,13 @@ export default function BusinessManagerApp() {
   const [promoItems, setPromoItems] = useState([]);
   const [promoDescription, setPromoDescription] = useState('');
   const [selectedProdForPromo, setSelectedProdForPromo] = useState('');
+
+  // AUTO-SCROLL CADA VEZ QUE SE AGREGA UN PRODUCTO O COMBO
+  useEffect(() => {
+    if (saleCart.length > 0) {
+      cartEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [saleCart]);
 
   const notify = (msg) => {
     setToast(msg);
@@ -824,7 +834,7 @@ export default function BusinessManagerApp() {
 
       <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-950">
         {activeTab === 'sales' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             <div className="lg:col-span-7 space-y-5">
               <div className="relative">
                 <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
@@ -961,7 +971,7 @@ export default function BusinessManagerApp() {
                   )}
                 </div>
 
-                <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto pr-1">
+                <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto pr-1 transition-all">
                   {saleCart.length === 0 ? (
                     <div className="text-center text-slate-500 py-12 space-y-2">
                       <ShoppingBag className="w-10 h-10 mx-auto opacity-30 text-slate-400" />
@@ -988,6 +998,7 @@ export default function BusinessManagerApp() {
                 </div>
               </div>
 
+              {/* PANEL DE CONFIRMACIÓN - ACOMPAÑA DINÁMICAMENTE A LA LISTA */}
               <div className="space-y-4 pt-4 border-t border-slate-800">
                 <div>
                   <label className="text-xs text-slate-400 block mb-1.5 font-medium">Cliente:</label>
@@ -1029,7 +1040,7 @@ export default function BusinessManagerApp() {
                   </div>
                 </div>
 
-                {/* NUEVO CAMPO: DIRECCIÓN (OPCIONAL) */}
+                {/* CAMPO DIRECCIÓN */}
                 <div>
                   <label className="text-xs text-slate-400 block mb-1.5 font-medium flex items-center gap-1">
                     <MapPin className="w-3.5 h-3.5 text-fuchsia-400" /> Dirección de Entrega (Opcional):
@@ -1061,6 +1072,9 @@ export default function BusinessManagerApp() {
                 >
                   <Check className="w-5 h-5 stroke-[3]" /> Registrar Venta ({saleCart.length} ítems)
                 </button>
+
+                {/* Elemento invisible de anclaje para auto-scroll */}
+                <div ref={cartEndRef} />
               </div>
             </div>
           </div>
@@ -1162,7 +1176,6 @@ export default function BusinessManagerApp() {
                           )}
                         </div>
 
-                        {/* MUESTRA LA DIRECCIÓN SI FUE INGRESADA EN LA VENTA */}
                         {s.address && (
                           <div className="flex items-center gap-1 text-[11px] text-fuchsia-300 font-medium bg-slate-900 border border-fuchsia-500/30 px-2.5 py-1 rounded-xl w-fit">
                             <MapPin className="w-3.5 h-3.5 text-fuchsia-400 shrink-0" />
@@ -1170,13 +1183,11 @@ export default function BusinessManagerApp() {
                           </div>
                         )}
 
-                        {/* DETALLE DEL TICKET CON HIGHLIGHT / HOVER TOOLTIP EN COMBOS */}
                         <div className="flex flex-wrap items-center gap-1.5 pt-1">
                           <span className="text-[11px] text-slate-400 font-medium mr-1">Detalle del Ticket:</span>
                           {s.items && s.items.map((it, idx) => {
                             const isPromo = it.type === 'promo' || (it.raw && it.raw.type === 'promo') || promos.some(p => p.id === it.id || p.name === it.name);
 
-                            // Obtener el contenido del combo desde los datos guardados o la lista de promos
                             let promoContent = '';
                             if (isPromo) {
                               if (it.raw?.description) {
@@ -1202,7 +1213,6 @@ export default function BusinessManagerApp() {
                                 <span>{it.name}</span>
                                 {isPromo && <Sparkles className="w-3 h-3 text-fuchsia-400 inline ml-0.5" />}
 
-                                {/* Cartel emergente (Tooltip) al pasar el cursor */}
                                 {isPromo && (
                                   <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col items-center z-50 pointer-events-none w-max max-w-xs transition-all animate-fadeIn">
                                     <div className="bg-slate-900 border border-fuchsia-500/60 text-slate-100 text-[11px] font-sans px-3 py-2 rounded-2xl shadow-2xl shadow-fuchsia-950/80 text-center whitespace-normal backdrop-blur-md">
@@ -1616,7 +1626,7 @@ export default function BusinessManagerApp() {
         )}
       </main>
 
-      {/* --- MODAL PARA RETIRO DE PLATA (SOLO GANANCIA/SUELDO) --- */}
+      {/* --- MODAL PARA RETIRO DE PLATA --- */}
       {showWithdrawModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
