@@ -32,7 +32,10 @@ import {
   Calendar,
   CreditCard,
   Pencil,
-  PackagePlus
+  PackagePlus,
+  Wallet,
+  PieChart,
+  ShieldCheck
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN DE FIREBASE ---
@@ -169,6 +172,10 @@ export default function BusinessManagerApp() {
   const [saleToPayModal, setSaleToPayModal] = useState(null);
   const [toast, setToast] = useState(null);
 
+  // --- ESTADOS PARA SISTEMA DE LAS 3 CAJAS ---
+  const [showBoxesModal, setShowBoxesModal] = useState(false);
+  const [salaryPercentage, setSalaryPercentage] = useState(50);
+
   // --- ESTADOS PARA GESTIÓN DE PRODUCTOS EN PROMO ---
   const [promoItems, setPromoItems] = useState([]);
   const [promoDescription, setPromoDescription] = useState('');
@@ -184,17 +191,16 @@ export default function BusinessManagerApp() {
     const totalSalesCost = sales.reduce((acc, s) => acc + s.cost, 0);
     const merchandiseExpenses = stockEntries.reduce((acc, e) => acc + (e.totalCost || 0), 0);
 
-    // Se descuentan los gastos de compras de mercadería de los ingresos totales y ganancia
     const totalRevenue = rawRevenue - merchandiseExpenses;
     const netProfit = rawRevenue - totalSalesCost - merchandiseExpenses;
     const totalPendingDebt = clients.reduce((acc, c) => acc + c.debt, 0);
     const lowStockCount = products.filter((p) => p.stock <= p.minStock).length;
     const stockValuation = products.reduce((acc, p) => acc + p.costPrice * p.stock, 0);
 
-    return { totalRevenue, totalCost: totalSalesCost, netProfit, totalPendingDebt, lowStockCount, stockValuation, merchandiseExpenses };
+    return { totalRevenue, totalCost: totalSalesCost, netProfit, totalPendingDebt, lowStockCount, stockValuation, merchandiseExpenses, rawRevenue };
   }, [sales, clients, products, stockEntries]);
 
-  // Categorías para Registrar Venta (incluye la pestaña especial "Promociones")
+  // Categorías para Registrar Venta
   const categories = useMemo(() => {
     const prodCats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
     return ['Todas', 'Promociones', ...prodCats];
@@ -206,7 +212,7 @@ export default function BusinessManagerApp() {
     return ['Todas', ...prodCats];
   }, [products]);
 
-  // --- INVENTARIO FILTRADO POR GRUPO Y ORDENADO ALFABÉTICAMENTE ---
+  // INVENTARIO FILTRADO POR GRUPO Y ORDENADO ALFABÉTICAMENTE
   const sortedAndFilteredInventory = useMemo(() => {
     let list = products;
     if (inventoryCategoryFilter !== 'Todas') {
@@ -217,11 +223,10 @@ export default function BusinessManagerApp() {
     );
   }, [products, inventoryCategoryFilter]);
 
-  // --- ÍTEMS DISPONIBLES EN REGISTRAR VENTA ---
+  // ÍTEMS DISPONIBLES EN REGISTRAR VENTA
   const availableItems = useMemo(() => {
     let items = [];
 
-    // Incluir promociones si el filtro es 'Todas' o 'Promociones'
     if (categoryFilter === 'Todas' || categoryFilter === 'Promociones') {
       promos.filter(p => p.active).forEach(p => {
         items.push({
@@ -235,7 +240,6 @@ export default function BusinessManagerApp() {
       });
     }
 
-    // Incluir productos solo cuando NO estemos filtrando únicamente 'Promociones'
     if (categoryFilter !== 'Promociones') {
       products.forEach(p => {
         if (categoryFilter === 'Todas' || p.category === categoryFilter) {
@@ -263,13 +267,11 @@ export default function BusinessManagerApp() {
   }, [products, promos, categoryFilter, searchTerm]);
 
   const addToSaleCart = (item) => {
-    // Validación de stock para Productos
     if (item.type === 'product' && item.stock <= 0) {
       notify('⚠️ Producto sin stock disponible');
       return;
     }
 
-    // Validación de stock para Promociones
     if (item.type === 'promo') {
       const hasNoStock = item.raw.items?.some((comp) => {
         const p = products.find((prod) => prod.id === comp.productId);
@@ -284,7 +286,6 @@ export default function BusinessManagerApp() {
     setSaleCart((prev) => {
       const existing = prev.find((i) => i.id === item.id);
       
-      // Control de stock máximo en carrito para productos
       if (item.type === 'product') {
         const currentQtyInCart = existing ? existing.qty : 0;
         if (currentQtyInCart + 1 > item.stock) {
@@ -307,7 +308,6 @@ export default function BusinessManagerApp() {
           if (item.id === id) {
             const newQty = item.qty + delta;
 
-            // Verificar no exceder el stock al aumentar desde el carrito
             if (delta > 0 && item.type === 'product') {
               const prod = products.find((p) => p.id === item.id);
               if (prod && newQty > prod.stock) {
@@ -372,7 +372,6 @@ export default function BusinessManagerApp() {
     if (entryCart.length === 0) return;
     const costVal = parseFloat(entryTotalCostInput) || 0;
 
-    // Actualizar stock en Firestore para cada producto ingresado
     for (const item of entryCart) {
       const currentProd = products.find((p) => p.id === item.id);
       if (currentProd) {
@@ -381,7 +380,6 @@ export default function BusinessManagerApp() {
       }
     }
 
-    // Registrar el ingreso en la colección stock_entries
     const newEntry = {
       id: `ING-${Date.now().toString().slice(-4)}`,
       date: new Date().toISOString(),
@@ -400,7 +398,7 @@ export default function BusinessManagerApp() {
     notify(`📦 Ingreso de mercadería registrado (${formatCurrency(costVal)}) y stock actualizado`);
   };
 
-  // --- MÉTODOS AUXILIARES PARA LA CREACIÓN/EDICIÓN DE PROMOS ---
+  // --- MÉTODOS AUXILIARES PARA PROMOS ---
   const handleUpdatePromoItems = (newItems) => {
     setPromoItems(newItems);
     setPromoDescription(formatPromoDescription(newItems, products));
@@ -478,12 +476,10 @@ export default function BusinessManagerApp() {
       }
     });
 
-    // Actualizar stock en Firestore
     updatedProducts.forEach((p) => {
       updateDoc(doc(db, 'products', p.id), { stock: p.stock });
     });
 
-    // Actualizar cliente si es fiado
     if (paymentMethod === 'Fiado') {
       const clientObj = clients.find((c) => c.name === selectedClient);
       if (clientObj) {
@@ -746,7 +742,6 @@ export default function BusinessManagerApp() {
             <SidebarBtn active={activeTab === 'promos'} onClick={() => setActiveTab('promos')} icon={<Sparkles />}>
               Promociones
             </SidebarBtn>
-            {/* NUEVA PESTAÑA COLOCADA ARRIBA DE CUENTA CORRIENTE */}
             <SidebarBtn active={activeTab === 'stock_entry'} onClick={() => setActiveTab('stock_entry')} icon={<PackagePlus />}>
               Ingreso Mercadería
             </SidebarBtn>
@@ -772,7 +767,6 @@ export default function BusinessManagerApp() {
                 />
               </div>
 
-              {/* FILTROS POR CATEGORÍA EN REGISTRAR VENTA */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                 {categories.map((cat) => (
                   <button
@@ -791,7 +785,6 @@ export default function BusinessManagerApp() {
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {availableItems.map((item) => {
-                  // Determinar si el producto o la promo está SIN STOCK
                   const isOutOfStock =
                     item.type === 'product'
                       ? item.stock <= 0
@@ -989,18 +982,54 @@ export default function BusinessManagerApp() {
           </div>
         )}
 
+        {/* PESTAÑA: RESUMEN DE VENTAS */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold text-white">Resumen Comercial</h2>
-              <p className="text-xs text-slate-400">Estado general de ingresos, ganancias e historial</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-white">Resumen Comercial</h2>
+                <p className="text-xs text-slate-400">Estado general de ingresos, ganancias e historial</p>
+              </div>
+
+              {/* BOTÓN PARA ABRIR SISTEMA DE LAS 3 CAJAS */}
+              <button
+                onClick={() => setShowBoxesModal(true)}
+                className="bg-gradient-to-r from-fuchsia-500 to-purple-600 hover:from-fuchsia-400 hover:to-purple-500 text-slate-950 font-extrabold px-4 py-2.5 rounded-2xl text-xs flex items-center gap-2 shadow-lg shadow-fuchsia-500/25 transition-all transform hover:scale-[1.02]"
+              >
+                <Wallet className="w-4 h-4 text-slate-950" /> Ver Desglose de Cajas (3 Cajas)
+              </button>
             </div>
 
+            {/* CADA CUADRADO ES TOCABLE PARA ABRIR EL DESGLOSE */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <KpiCard title="Ingresos Totales (Netos)" value={formatCurrency(metrics.totalRevenue)} icon={<DollarSign className="text-fuchsia-400" />} />
-              <KpiCard title="Ganancia Neta Limpia" value={formatCurrency(metrics.netProfit)} icon={<TrendingUp className="text-purple-400" />} />
-              <KpiCard title="Pendiente en Fiados" value={formatCurrency(metrics.totalPendingDebt)} icon={<Users className="text-amber-400" />} />
-              <KpiCard title="Productos Bajo Stock" value={metrics.lowStockCount.toString()} icon={<AlertTriangle className="text-red-400" />} />
+              <KpiCard
+                title="Ingresos Totales (Netos)"
+                value={formatCurrency(metrics.totalRevenue)}
+                icon={<DollarSign className="text-fuchsia-400" />}
+                onClick={() => setShowBoxesModal(true)}
+                hint="Toca para ver Cajas"
+              />
+              <KpiCard
+                title="Ganancia Neta Limpia"
+                value={formatCurrency(metrics.netProfit)}
+                icon={<TrendingUp className="text-purple-400" />}
+                onClick={() => setShowBoxesModal(true)}
+                hint="Toca para ver Cajas"
+              />
+              <KpiCard
+                title="Pendiente en Fiados"
+                value={formatCurrency(metrics.totalPendingDebt)}
+                icon={<Users className="text-amber-400" />}
+                onClick={() => setShowBoxesModal(true)}
+                hint="Toca para ver Cajas"
+              />
+              <KpiCard
+                title="Productos Bajo Stock"
+                value={metrics.lowStockCount.toString()}
+                icon={<AlertTriangle className="text-red-400" />}
+                onClick={() => setShowBoxesModal(true)}
+                hint="Toca para ver Cajas"
+              />
             </div>
 
             <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl">
@@ -1104,7 +1133,6 @@ export default function BusinessManagerApp() {
               </div>
             </div>
 
-            {/* BARRA DE FILTRADO POR GRUPOS / CATEGORÍAS EN INVENTARIO */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
               {inventoryCategories.map((cat) => (
                 <button
@@ -1434,6 +1462,115 @@ export default function BusinessManagerApp() {
           </div>
         )}
       </main>
+
+      {/* --- MODAL DE LAS 3 CAJAS DEL NEGOCIO --- */}
+      {showBoxesModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-base text-white flex items-center gap-2">
+                  <Wallet className="w-5 h-5 text-fuchsia-400" /> Sistema de las 3 Cajas
+                </h3>
+                <p className="text-[11px] text-slate-400">Control de fondos para no descapitalizar tu negocio</p>
+              </div>
+              <button onClick={() => setShowBoxesModal(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* CAJA 1 */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-blue-500/30 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-blue-400 flex items-center gap-1.5 uppercase tracking-wider">
+                  <ShieldCheck className="w-4 h-4" /> Caja 1: Costo de Reposición (Plata del Negocio)
+                </span>
+                <span className="text-[10px] bg-blue-500/20 text-blue-300 font-bold px-2 py-0.5 rounded-full border border-blue-500/30">
+                  NO SE TOCA
+                </span>
+              </div>
+              <div className="font-mono text-2xl font-bold text-white">
+                {formatCurrency(metrics.totalCost)}
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Es la suma exacta de lo que te costó a ti comprar los productos vendidos (<span className="text-slate-200 font-mono">costPrice</span>). Esta plata es sagrada y no se toca, va directo a reponer el stock vendido para no descapitalizarte.
+              </p>
+            </div>
+
+            {/* CAJA 2 */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-emerald-500/30 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 uppercase tracking-wider">
+                  <TrendingUp className="w-4 h-4" /> Caja 2: Ganancia Neta Limpia
+                </span>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                  Rendimiento Real
+                </span>
+              </div>
+              <div className="font-mono text-2xl font-bold text-emerald-400">
+                {formatCurrency(metrics.netProfit)}
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Es la diferencia directa entre lo cobrado y los costos de ventas (<span className="text-slate-200 font-mono">Total - Costo</span>).
+              </p>
+            </div>
+
+            {/* CAJA 3 */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-fuchsia-500/30 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-fuchsia-400 flex items-center gap-1.5 uppercase tracking-wider">
+                  <PieChart className="w-4 h-4" /> Caja 3: Tu Sueldo vs. Fondo de Crecimiento
+                </span>
+                <span className="text-[10px] bg-fuchsia-500/20 text-fuchsia-300 font-bold px-2 py-0.5 rounded-full border border-fuchsia-500/30">
+                  Distribución
+                </span>
+              </div>
+
+              <div className="space-y-1.5 pt-1">
+                <div className="flex justify-between text-xs text-slate-300 font-medium">
+                  <span>Tu Sueldo / Ganancia Personal: <strong className="text-fuchsia-400 font-mono">{salaryPercentage}%</strong></span>
+                  <span>Fondo de Crecimiento: <strong className="text-purple-400 font-mono">{100 - salaryPercentage}%</strong></span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={salaryPercentage}
+                  onChange={(e) => setSalaryPercentage(Number(e.target.value))}
+                  className="w-full accent-fuchsia-500 bg-slate-800 rounded-lg cursor-pointer h-2"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-800">
+                <div className="bg-slate-900 p-3 rounded-xl border border-fuchsia-500/20 text-center">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Tu Sueldo / Retiro</span>
+                  <span className="font-mono font-bold text-lg text-fuchsia-400 block mt-0.5">
+                    {formatCurrency(metrics.netProfit * (salaryPercentage / 100))}
+                  </span>
+                </div>
+                <div className="bg-slate-900 p-3 rounded-xl border border-purple-500/20 text-center">
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold block">Reinversión / Crecimiento</span>
+                  <span className="font-mono font-bold text-lg text-purple-400 block mt-0.5">
+                    {formatCurrency(metrics.netProfit * ((100 - salaryPercentage) / 100))}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-[10px] text-slate-400 italic">
+                💡 De la Ganancia Neta define este porcentaje para volver a guardar dinero en el negocio y comprar más variedad de bebidas o equipamiento.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowBoxesModal(false)}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-3 rounded-2xl text-xs transition"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
 
       {saleToPayModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1894,12 +2031,19 @@ function SidebarBtn({ active, onClick, icon, children, badge }) {
   );
 }
 
-function KpiCard({ title, value, icon }) {
+// COMPONENTE KPI CARD ACTUALIZADO PARA ACEPTAR ONCLICK Y HINT
+function KpiCard({ title, value, icon, onClick, hint }) {
   return (
-    <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 flex justify-between items-start shadow-xl">
+    <div
+      onClick={onClick}
+      className={`bg-slate-900/90 border border-slate-800 rounded-3xl p-5 flex justify-between items-start shadow-xl transition-all ${
+        onClick ? 'cursor-pointer hover:border-fuchsia-500/60 hover:scale-[1.02]' : ''
+      }`}
+    >
       <div>
         <span className="text-xs text-slate-400 font-medium">{title}</span>
         <div className="font-mono text-xl font-bold text-slate-100 mt-1">{value}</div>
+        {hint && <span className="text-[10px] text-fuchsia-400 font-semibold block mt-1">{hint}</span>}
       </div>
       <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800/80 shadow">{icon}</div>
     </div>
