@@ -142,6 +142,9 @@ export default function BusinessManagerApp() {
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('Todas');
+  
+  // --- ESTADO PARA FILTRO POR CATEGORÍA EN EL INVENTARIO ---
+  const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('Todas');
 
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
@@ -176,6 +179,17 @@ export default function BusinessManagerApp() {
   const categories = useMemo(() => {
     return ['Todas', ...Array.from(new Set(products.map((p) => p.category)))];
   }, [products]);
+
+  // --- INVENTARIO FILTRADO POR GRUPO Y ORDENADO ALFABÉTICAMENTE ---
+  const sortedAndFilteredInventory = useMemo(() => {
+    let list = products;
+    if (inventoryCategoryFilter !== 'Todas') {
+      list = list.filter((p) => p.category === inventoryCategoryFilter);
+    }
+    return [...list].sort((a, b) =>
+      (a.name || '').localeCompare(b.name || '', 'es', { sensitivity: 'base' })
+    );
+  }, [products, inventoryCategoryFilter]);
 
   const availableItems = useMemo(() => {
     let items = [];
@@ -890,7 +904,7 @@ export default function BusinessManagerApp() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-bold text-white">Inventario de Productos</h2>
-                <p className="text-xs text-slate-400">Control rápido de precios, stock e ingresos</p>
+                <p className="text-xs text-slate-400">Control rápido de precios, stock e ingresos (Orden alfabético A-Z)</p>
               </div>
 
               <div className="flex items-center gap-3">
@@ -910,6 +924,23 @@ export default function BusinessManagerApp() {
               </div>
             </div>
 
+            {/* BARRA DE FILTRADO POR GRUPOS / CATEGORÍAS EN INVENTARIO */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setInventoryCategoryFilter(cat)}
+                  className={`whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                    inventoryCategoryFilter === cat
+                      ? 'bg-fuchsia-500 text-slate-950 border-fuchsia-500 font-bold shadow-md shadow-fuchsia-500/20'
+                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
             <div className="bg-slate-900/90 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
@@ -925,55 +956,67 @@ export default function BusinessManagerApp() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
-                    {products.map((p) => {
-                      const isLowStock = p.stock <= p.minStock;
-                      return (
-                        <tr key={p.id} className="hover:bg-slate-800/30 transition">
-                          <td 
-                            className={`p-4 font-semibold ${isLowStock ? 'text-red-400 font-bold' : 'text-slate-200'}`}
-                            style={{ color: isLowStock ? '#f87171' : undefined }}
-                          >
-                            {p.name}
-                          </td>
-                          <td className="p-4 text-slate-400">{p.category}</td>
-                          <td className="p-4 font-mono text-slate-300">{formatCurrency(p.costPrice)}</td>
-                          <td className="p-4 font-mono text-fuchsia-400 font-bold">{formatCurrency(p.sellPrice)}</td>
-                          <td className="p-4 text-center">
-                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                              isLowStock
-                                ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                                : 'bg-slate-800 text-slate-300'
-                            }`}>
-                              {p.stock} un.
-                            </span>
-                          </td>
-                          <td className="p-4 text-center">
-                            <div className="flex justify-center items-center gap-1.5">
-                              <button onClick={() => handleAdjustStock(p.id, -1)} className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold text-xs">-</button>
-                              <button onClick={() => handleAdjustStock(p.id, 1)} className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold text-xs">+</button>
-                            </div>
-                          </td>
-                          <td className="p-4 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                onClick={() => setEditingProduct(p)}
-                                title="Editar precios y producto"
-                                className="p-2 rounded-xl bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-400 transition"
-                              >
-                                <Pencil className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteProduct(p.id)}
-                                title="Eliminar producto"
-                                className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {sortedAndFilteredInventory.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" className="p-8 text-center text-slate-500 text-xs">
+                          No hay productos para mostrar en esta categoría.
+                        </td>
+                      </tr>
+                    ) : (
+                      sortedAndFilteredInventory.map((p) => {
+                        const isLowStock = p.stock <= p.minStock;
+                        return (
+                          <tr key={p.id} className="hover:bg-slate-800/30 transition">
+                            <td 
+                              className={`p-4 font-semibold ${isLowStock ? 'text-red-400 font-bold' : 'text-slate-200'}`}
+                              style={{ color: isLowStock ? '#f87171' : undefined }}
+                            >
+                              {p.name}
+                            </td>
+                            <td className="p-4 text-slate-400">
+                              <span className="bg-slate-950 text-slate-300 border border-slate-800 px-2.5 py-1 rounded-lg text-[10px] font-semibold">
+                                {p.category}
+                              </span>
+                            </td>
+                            <td className="p-4 font-mono text-slate-300">{formatCurrency(p.costPrice)}</td>
+                            <td className="p-4 font-mono text-fuchsia-400 font-bold">{formatCurrency(p.sellPrice)}</td>
+                            <td className="p-4 text-center">
+                              <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                                isLowStock
+                                  ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                  : 'bg-slate-800 text-slate-300'
+                              }`}>
+                                {p.stock} un.
+                              </span>
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="flex justify-center items-center gap-1.5">
+                                <button onClick={() => handleAdjustStock(p.id, -1)} className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold text-xs">-</button>
+                                <button onClick={() => handleAdjustStock(p.id, 1)} className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg font-bold text-xs">+</button>
+                              </div>
+                            </td>
+                            <td className="p-4 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  onClick={() => setEditingProduct(p)}
+                                  title="Editar precios y producto"
+                                  className="p-2 rounded-xl bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-400 transition"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteProduct(p.id)}
+                                  title="Eliminar producto"
+                                  className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 transition"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1223,7 +1266,7 @@ export default function BusinessManagerApp() {
                 </div>
                 <div>
                   <label className="text-slate-400 block mb-1">Categoría:</label>
-                  <input required name="category" placeholder="Destilados" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
+                  <input required name="category" placeholder="Vodka / Licor / etc." className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -1324,7 +1367,6 @@ export default function BusinessManagerApp() {
                 </select>
               </div>
 
-              {/* SECCIÓN PARA AGREGAR PRODUCTOS DIRECTAMENTE DEL INVENTARIO */}
               <div className="bg-slate-950/70 p-3 rounded-2xl border border-slate-800 space-y-2">
                 <label className="text-fuchsia-400 font-bold block">Agregar productos del Inventario:</label>
                 <div className="flex gap-2">
@@ -1352,7 +1394,6 @@ export default function BusinessManagerApp() {
                   </button>
                 </div>
 
-                {/* LISTA DE PRODUCTOS SUMADOS AL COMBO */}
                 {promoItems.length > 0 && (
                   <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
                     <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Productos incluidos:</span>
@@ -1422,7 +1463,6 @@ export default function BusinessManagerApp() {
                 </select>
               </div>
 
-              {/* SECCIÓN PARA AGREGAR PRODUCTOS DIRECTAMENTE DEL INVENTARIO (EDICIÓN) */}
               <div className="bg-slate-950/70 p-3 rounded-2xl border border-slate-800 space-y-2">
                 <label className="text-fuchsia-400 font-bold block">Agregar productos del Inventario:</label>
                 <div className="flex gap-2">
@@ -1450,7 +1490,6 @@ export default function BusinessManagerApp() {
                   </button>
                 </div>
 
-                {/* LISTA DE PRODUCTOS SUMADOS AL COMBO */}
                 {promoItems.length > 0 && (
                   <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
                     <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Productos incluidos:</span>
