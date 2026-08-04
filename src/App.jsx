@@ -24,14 +24,6 @@ import {
   Pencil
 } from 'lucide-react';
 
-// --- INYECCIÓN INMEDIATA DE TAILWIND ---
-if (typeof document !== 'undefined' && !document.getElementById('tailwind-cdn-script')) {
-  const script = document.createElement('script');
-  script.id = 'tailwind-cdn-script';
-  script.src = 'https://cdn.tailwindcss.com';
-  document.head.appendChild(script);
-}
-
 // --- UTILIDADES DE FORMATO ---
 const formatCurrency = (amount) =>
   new Intl.NumberFormat('es-AR', {
@@ -124,18 +116,28 @@ const INITIAL_SALES = [
 ];
 
 export default function BusinessManagerApp() {
-  // Estado para forzar refresco automático y aplicar los estilos sin intervención del usuario
-  const [, setForceRender] = useState(0);
+  const [isReady, setIsReady] = useState(false);
 
+  // Asegura que Tailwind esté 100% cargado antes de renderizar la app
   useEffect(() => {
-    const t1 = setTimeout(() => setForceRender(1), 100);
-    const t2 = setTimeout(() => setForceRender(2), 500);
-    const t3 = setTimeout(() => setForceRender(3), 1000);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
+    const checkTailwind = () => {
+      if (window.tailwind) {
+        setIsReady(true);
+      } else {
+        setTimeout(checkTailwind, 50);
+      }
     };
+
+    const existingScript = document.getElementById('tailwind-cdn-script');
+    if (!existingScript) {
+      const script = document.createElement('script');
+      script.id = 'tailwind-cdn-script';
+      script.src = 'https://cdn.tailwindcss.com';
+      script.onload = () => setIsReady(true);
+      document.head.appendChild(script);
+    } else {
+      checkTailwind();
+    }
   }, []);
 
   const [activeTab, setActiveTab] = useState('sales');
@@ -546,16 +548,22 @@ export default function BusinessManagerApp() {
     );
   };
 
-  return (
-    <div 
-      style={{ backgroundColor: '#020617', color: '#f8fafc', minHeight: '100vh' }} 
-      className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row antialiased"
-    >
-      {/* Regla CSS directa para evitar el pantallazo blanco inicial */}
-      <style>{`
-        body { background-color: #020617 !important; color: #f8fafc !important; margin: 0; }
-      `}</style>
+  // --- PANTALLA DE CARGA INICIAL (Previene que se vea la web sin diseño) ---
+  if (!isReady) {
+    return (
+      <div style={{ backgroundColor: '#020617', color: '#f8fafc', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: '40px', height: '40px', border: '4px solid #334155', borderTopColor: '#d946ef', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          <h2 style={{ fontSize: '18px', fontWeight: 'bold', margin: '0 0 4px' }}>Benga Drinks</h2>
+          <p style={{ fontSize: '12px', color: '#94a3b8', margin: 0 }}>Cargando sistema...</p>
+        </div>
+      </div>
+    );
+  }
 
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row antialiased">
       {toast && (
         <div className="fixed top-5 right-5 z-[100] bg-fuchsia-500 text-slate-950 px-4 py-3 rounded-2xl font-bold shadow-2xl shadow-fuchsia-500/40 flex items-center gap-2 animate-bounce">
           <Check className="w-5 h-5 stroke-[3]" />
@@ -563,7 +571,7 @@ export default function BusinessManagerApp() {
         </div>
       )}
 
-      <aside style={{ backgroundColor: '#0f172a' }} className="w-full md:w-64 bg-slate-900/90 border-r border-slate-800/80 p-5 flex flex-col justify-between backdrop-blur-md">
+      <aside className="w-full md:w-64 bg-slate-900/90 border-r border-slate-800/80 p-5 flex flex-col justify-between backdrop-blur-md">
         <div className="space-y-6">
           <div className="flex items-center gap-3 px-2">
             <div className="bg-gradient-to-tr from-fuchsia-600 to-purple-500 p-2.5 rounded-2xl text-slate-950 font-bold shadow-lg shadow-fuchsia-500/25">
@@ -595,7 +603,7 @@ export default function BusinessManagerApp() {
         </div>
       </aside>
 
-      <main style={{ backgroundColor: '#020617' }} className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-950">
+      <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-950">
         {activeTab === 'sales' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-7 space-y-5">
