@@ -785,15 +785,17 @@ export default function BusinessManagerApp() {
       <aside className="w-full md:w-64 bg-slate-900/90 border-r border-slate-800/80 p-5 flex flex-col justify-between backdrop-blur-md">
         <div className="space-y-6">
           <div className="flex items-center gap-3 px-2">
-            <div className="bg-gradient-to-tr from-fuchsia-600 to-purple-500 p-2.5 rounded-2xl text-slate-950 font-bold shadow-lg shadow-fuchsia-500/25">
-              <BarChart3 className="w-6 h-6 text-slate-950" />
-            </div>
+            {/* Foto de tu avatar */}
+            <img 
+              src="/avatar.png" 
+              alt="Avatar" 
+              className="w-12 h-12 rounded-2xl object-cover border-2 border-fuchsia-500/50 shadow-lg shadow-fuchsia-500/30"
+            />
             <div>
               <h1 className="font-bold text-lg tracking-wide text-white">Benga Drinks</h1>
               <p className="text-[11px] text-fuchsia-400 font-semibold tracking-wider">GESTIÓN DE STOCK & VENTAS</p>
             </div>
           </div>
-
           <nav className="space-y-1.5">
             <SidebarBtn active={activeTab === 'sales'} onClick={() => setActiveTab('sales')} icon={<Receipt />}>
               Registrar Venta
@@ -1143,13 +1145,55 @@ export default function BusinessManagerApp() {
                           )}
                         </div>
 
+                        {/* DETALLE DEL TICKET CON HIGHLIGHT / HOVER TOOLTIP EN COMBOS */}
                         <div className="flex flex-wrap items-center gap-1.5 pt-1">
                           <span className="text-[11px] text-slate-400 font-medium mr-1">Detalle del Ticket:</span>
-                          {s.items && s.items.map((it, idx) => (
-                            <span key={idx} className="bg-slate-900 text-slate-200 border border-slate-800 px-2.5 py-1 rounded-xl text-[11px] font-medium flex items-center gap-1">
-                              <span className="text-fuchsia-400 font-bold font-mono">{it.qty}x</span> {it.name}
-                            </span>
-                          ))}
+                          {s.items && s.items.map((it, idx) => {
+                            const isPromo = it.type === 'promo' || (it.raw && it.raw.type === 'promo') || promos.some(p => p.id === it.id || p.name === it.name);
+
+                            // Obtener el contenido del combo desde los datos guardados o la lista de promos
+                            let promoContent = '';
+                            if (isPromo) {
+                              if (it.raw?.description) {
+                                promoContent = it.raw.description;
+                              } else {
+                                const matchedPromo = promos.find(p => p.id === it.id || p.name === it.name);
+                                if (matchedPromo) {
+                                  promoContent = matchedPromo.description || formatPromoDescription(matchedPromo.items, products);
+                                }
+                              }
+                            }
+
+                            return (
+                              <span
+                                key={idx}
+                                className={`relative group px-2.5 py-1 rounded-xl text-[11px] font-medium flex items-center gap-1 border transition-all ${
+                                  isPromo
+                                    ? 'bg-purple-950/60 border-fuchsia-500/60 text-purple-200 hover:border-fuchsia-400 cursor-help shadow-sm shadow-fuchsia-500/20'
+                                    : 'bg-slate-900 border-slate-800 text-slate-200'
+                                }`}
+                              >
+                                <span className="text-fuchsia-400 font-bold font-mono">{it.qty}x</span> 
+                                <span>{it.name}</span>
+                                {isPromo && <Sparkles className="w-3 h-3 text-fuchsia-400 inline ml-0.5" />}
+
+                                {/* Cartel emergente (Tooltip) al pasar el cursor */}
+                                {isPromo && (
+                                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col items-center z-50 pointer-events-none w-max max-w-xs transition-all animate-fadeIn">
+                                    <div className="bg-slate-900 border border-fuchsia-500/60 text-slate-100 text-[11px] font-sans px-3 py-2 rounded-2xl shadow-2xl shadow-fuchsia-950/80 text-center whitespace-normal backdrop-blur-md">
+                                      <span className="text-[10px] text-fuchsia-400 font-bold uppercase tracking-wider block mb-0.5">
+                                        📦 Contenido del Combo:
+                                      </span>
+                                      <span className="text-slate-200 font-medium">
+                                        {promoContent || 'Detalle del combo registrado'}
+                                      </span>
+                                    </div>
+                                    <div className="w-2.5 h-2.5 bg-slate-900 border-r border-b border-fuchsia-500/60 rotate-45 -mt-1.5"></div>
+                                  </div>
+                                )}
+                              </span>
+                            );
+                          })}
                         </div>
 
                         <p className="text-slate-500 text-[10px] font-mono flex items-center gap-1 pt-0.5">
