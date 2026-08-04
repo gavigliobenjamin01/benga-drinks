@@ -66,6 +66,18 @@ const formatDate = (isoString) => {
   });
 };
 
+// Función para formatear la descripción del combo automáticamente
+const formatPromoDescription = (itemsArr, productsList) => {
+  if (!itemsArr || itemsArr.length === 0) return '';
+  return itemsArr
+    .map((item) => {
+      const prod = productsList.find((p) => p.id === item.productId);
+      const name = prod ? prod.name : 'Producto';
+      return item.quantity > 1 ? `${item.quantity} ${name}` : name;
+    })
+    .join(', ');
+};
+
 export default function BusinessManagerApp() {
   const [isReady, setIsReady] = useState(false);
 
@@ -97,7 +109,7 @@ export default function BusinessManagerApp() {
   const [sales, setSales] = useState([]);
   const [clients, setClients] = useState([]);
 
-  // --- ESCUCHA DE FIRESTORE EN TIEMPO REAL (SIN REINICIO AUTOMÁTICO) ---
+  // --- ESCUCHA DE FIRESTORE EN TIEMPO REAL ---
   useEffect(() => {
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
       setProducts(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
@@ -139,6 +151,11 @@ export default function BusinessManagerApp() {
   const [saleToDeleteConfirm, setSaleToDeleteConfirm] = useState(null);
   const [saleToPayModal, setSaleToPayModal] = useState(null);
   const [toast, setToast] = useState(null);
+
+  // --- ESTADOS PARA GESTIÓN DE PRODUCTOS EN PROMO ---
+  const [promoItems, setPromoItems] = useState([]);
+  const [promoDescription, setPromoDescription] = useState('');
+  const [selectedProdForPromo, setSelectedProdForPromo] = useState('');
 
   const notify = (msg) => {
     setToast(msg);
@@ -244,6 +261,59 @@ export default function BusinessManagerApp() {
     }, 0);
   }, [saleCart, products]);
 
+  // --- MÉTODOS AUXILIARES PARA LA CREACIÓN/EDICIÓN DE PROMOS ---
+  const handleUpdatePromoItems = (newItems) => {
+    setPromoItems(newItems);
+    setPromoDescription(formatPromoDescription(newItems, products));
+  };
+
+  const handleAddProductToPromo = (productId) => {
+    if (!productId) return;
+    const existingIndex = promoItems.findIndex((i) => i.productId === productId);
+    let updated;
+    if (existingIndex >= 0) {
+      updated = promoItems.map((item, idx) =>
+        idx === existingIndex ? { ...item, quantity: item.quantity + 1 } : item
+      );
+    } else {
+      updated = [...promoItems, { productId, quantity: 1 }];
+    }
+    handleUpdatePromoItems(updated);
+  };
+
+  const handleUpdatePromoItemQty = (productId, delta) => {
+    const updated = promoItems
+      .map((item) => {
+        if (item.productId === productId) {
+          const newQty = item.quantity + delta;
+          return newQty <= 0 ? null : { ...item, quantity: newQty };
+        }
+        return item;
+      })
+      .filter(Boolean);
+    handleUpdatePromoItems(updated);
+  };
+
+  const handleRemoveProductFromPromo = (productId) => {
+    const updated = promoItems.filter((item) => item.productId !== productId);
+    handleUpdatePromoItems(updated);
+  };
+
+  const openCreatePromoModal = () => {
+    setPromoItems([]);
+    setPromoDescription('');
+    setSelectedProdForPromo('');
+    setShowPromoModal(true);
+  };
+
+  const openEditPromoModal = (promo) => {
+    setEditingPromo(promo);
+    const initialItems = promo.items || [];
+    setPromoItems(initialItems);
+    setPromoDescription(promo.description || formatPromoDescription(initialItems, products));
+    setSelectedProdForPromo('');
+  };
+
   // --- OPERACIONES EN FIRESTORE ---
 
   const handleRegisterSale = async () => {
@@ -300,7 +370,6 @@ export default function BusinessManagerApp() {
       }))
     };
 
-    // Guardar venta en Firestore
     await setDoc(doc(db, 'sales', newSale.id), newSale);
 
     setSaleCart([]);
@@ -354,12 +423,10 @@ export default function BusinessManagerApp() {
       }
     });
 
-    // Devolver stock en Firestore
     updatedProducts.forEach((p) => {
       updateDoc(doc(db, 'products', p.id), { stock: p.stock });
     });
 
-    // Ajustar deuda si era fiado
     if (saleToDelete.paymentMethod === 'Fiado') {
       const clientObj = clients.find((c) => c.name === saleToDelete.client);
       if (clientObj) {
@@ -450,12 +517,14 @@ export default function BusinessManagerApp() {
       type: fd.get('type'),
       price: parseFloat(fd.get('price')),
       active: true,
-      description: fd.get('description'),
-      items: []
+      description: promoDescription || fd.get('description') || '',
+      items: promoItems
     };
 
     await setDoc(doc(db, 'promos', newPromo.id), newPromo);
     setShowPromoModal(false);
+    setPromoItems([]);
+    setPromoDescription('');
     notify(`🎉 Promoción "${newPromo.name}" creada`);
   };
 
@@ -474,11 +543,14 @@ export default function BusinessManagerApp() {
       name: fd.get('name'),
       type: fd.get('type'),
       price: isNaN(newPrice) ? editingPromo.price : newPrice,
-      description: fd.get('description')
+      description: promoDescription || fd.get('description') || '',
+      items: promoItems
     };
 
     await updateDoc(doc(db, 'promos', editingPromo.id), updatedData);
     setEditingPromo(null);
+    setPromoItems([]);
+    setPromoDescription('');
     notify('✏️ Promoción actualizada');
   };
 
@@ -917,7 +989,7 @@ export default function BusinessManagerApp() {
                 <p className="text-xs text-slate-400">Armá packs especiales con precio promocional</p>
               </div>
               <button
-                onClick={() => setShowPromoModal(true)}
+                onClick={openCreatePromoModal}
                 className="bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 px-4 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-2 shadow-lg shadow-fuchsia-500/20"
               >
                 <Plus className="w-4 h-4 stroke-[3]" /> Crear Promo
@@ -937,7 +1009,7 @@ export default function BusinessManagerApp() {
 
                     <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => setEditingPromo(p)}
+                        onClick={() => openEditPromoModal(p)}
                         title="Modificar promoción"
                         className="p-2 rounded-xl bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-400 transition"
                       >
@@ -1233,7 +1305,7 @@ export default function BusinessManagerApp() {
 
       {showPromoModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h3 className="font-bold text-base text-white">Nueva Promoción</h3>
               <button onClick={() => setShowPromoModal(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
@@ -1241,7 +1313,7 @@ export default function BusinessManagerApp() {
             <form onSubmit={handleAddPromo} className="space-y-3 text-xs">
               <div>
                 <label className="text-slate-400 block mb-1">Nombre de Promo:</label>
-                <input required name="name" placeholder="Ej: 2x1 Cerveza Stella" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
+                <input required name="name" placeholder="Ej: Combo Fernet + Coca" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
               </div>
               <div>
                 <label className="text-slate-400 block mb-1">Tipo de Promo:</label>
@@ -1251,13 +1323,75 @@ export default function BusinessManagerApp() {
                   <option value="custom">2x1 / Regalo / Especial</option>
                 </select>
               </div>
+
+              {/* SECCIÓN PARA AGREGAR PRODUCTOS DIRECTAMENTE DEL INVENTARIO */}
+              <div className="bg-slate-950/70 p-3 rounded-2xl border border-slate-800 space-y-2">
+                <label className="text-fuchsia-400 font-bold block">Agregar productos del Inventario:</label>
+                <div className="flex gap-2">
+                  <select
+                    value={selectedProdForPromo}
+                    onChange={(e) => setSelectedProdForPromo(e.target.value)}
+                    className="flex-1 bg-slate-900 border border-slate-800 rounded-xl p-2 text-white text-xs"
+                  >
+                    <option value="">Seleccionar producto...</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.brand})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleAddProductToPromo(selectedProdForPromo);
+                      setSelectedProdForPromo('');
+                    }}
+                    className="bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1"
+                  >
+                    <Plus className="w-4 h-4 stroke-[3]" /> Agregar
+                  </button>
+                </div>
+
+                {/* LISTA DE PRODUCTOS SUMADOS AL COMBO */}
+                {promoItems.length > 0 && (
+                  <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Productos incluidos:</span>
+                    {promoItems.map((item) => {
+                      const prod = products.find((p) => p.id === item.productId);
+                      return (
+                        <div key={item.productId} className="flex items-center justify-between bg-slate-900 px-2.5 py-1.5 rounded-xl text-slate-200">
+                          <span className="font-medium truncate pr-2">{prod ? prod.name : 'Producto'}</span>
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800">
+                              <button type="button" onClick={() => handleUpdatePromoItemQty(item.productId, -1)} className="text-slate-400 hover:text-white font-bold">-</button>
+                              <span className="font-mono text-white px-1">{item.quantity}</span>
+                              <button type="button" onClick={() => handleUpdatePromoItemQty(item.productId, 1)} className="text-slate-400 hover:text-white font-bold">+</button>
+                            </div>
+                            <button type="button" onClick={() => handleRemoveProductFromPromo(item.productId)} className="text-red-400 hover:text-red-300">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="text-slate-400 block mb-1">Precio Final ($):</label>
                 <input required type="number" step="any" name="price" placeholder="2700" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono" />
               </div>
               <div>
-                <label className="text-slate-400 block mb-1">Descripción:</label>
-                <input required name="description" placeholder="Llevás 2 unidades al precio de 1" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
+                <label className="text-slate-400 block mb-1">Descripción (Auto-generada):</label>
+                <input
+                  required
+                  name="description"
+                  value={promoDescription}
+                  onChange={(e) => setPromoDescription(e.target.value)}
+                  placeholder="Ej: Fernet, Coca, Hielo"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                />
               </div>
               <button type="submit" className="w-full bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 font-bold py-3 rounded-xl transition mt-2">Guardar Promoción</button>
             </form>
@@ -1267,7 +1401,7 @@ export default function BusinessManagerApp() {
 
       {editingPromo && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h3 className="font-bold text-base text-white flex items-center gap-2">
                 <Pencil className="w-4 h-4 text-fuchsia-400" /> Modificar Promoción
@@ -1287,13 +1421,74 @@ export default function BusinessManagerApp() {
                   <option value="custom">2x1 / Regalo / Especial</option>
                 </select>
               </div>
+
+              {/* SECCIÓN PARA AGREGAR PRODUCTOS DIRECTAMENTE DEL INVENTARIO (EDICIÓN) */}
+              <div className="bg-slate-950/70 p-3 rounded-2xl border border-slate-800 space-y-2">
+                <label className="text-fuchsia-400 font-bold block">Agregar productos del Inventario:</label>
+                <div className="flex gap-2">
+                  <select
+                    value={selectedProdForPromo}
+                    onChange={(e) => setSelectedProdForPromo(e.target.value)}
+                    className="flex-1 bg-slate-900 border border-slate-800 rounded-xl p-2 text-white text-xs"
+                  >
+                    <option value="">Seleccionar producto...</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.brand})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleAddProductToPromo(selectedProdForPromo);
+                      setSelectedProdForPromo('');
+                    }}
+                    className="bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1"
+                  >
+                    <Plus className="w-4 h-4 stroke-[3]" /> Agregar
+                  </button>
+                </div>
+
+                {/* LISTA DE PRODUCTOS SUMADOS AL COMBO */}
+                {promoItems.length > 0 && (
+                  <div className="space-y-1.5 pt-2 border-t border-slate-800/80">
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Productos incluidos:</span>
+                    {promoItems.map((item) => {
+                      const prod = products.find((p) => p.id === item.productId);
+                      return (
+                        <div key={item.productId} className="flex items-center justify-between bg-slate-900 px-2.5 py-1.5 rounded-xl text-slate-200">
+                          <span className="font-medium truncate pr-2">{prod ? prod.name : 'Producto'}</span>
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800">
+                              <button type="button" onClick={() => handleUpdatePromoItemQty(item.productId, -1)} className="text-slate-400 hover:text-white font-bold">-</button>
+                              <span className="font-mono text-white px-1">{item.quantity}</span>
+                              <button type="button" onClick={() => handleUpdatePromoItemQty(item.productId, 1)} className="text-slate-400 hover:text-white font-bold">+</button>
+                            </div>
+                            <button type="button" onClick={() => handleRemoveProductFromPromo(item.productId)} className="text-red-400 hover:text-red-300">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="text-fuchsia-400 font-bold block mb-1">Precio Final ($):</label>
                 <input required type="number" step="any" name="price" defaultValue={editingPromo.price} className="w-full bg-slate-950 border border-fuchsia-500/50 rounded-xl p-2.5 text-white font-mono focus:border-fuchsia-400 focus:outline-none" />
               </div>
               <div>
                 <label className="text-slate-400 block mb-1">Descripción:</label>
-                <input required name="description" defaultValue={editingPromo.description} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
+                <input
+                  required
+                  name="description"
+                  value={promoDescription}
+                  onChange={(e) => setPromoDescription(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                />
               </div>
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => setEditingPromo(null)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition">
@@ -1375,3 +1570,4 @@ function KpiCard({ title, value, icon }) {
       <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800/80 shadow">{icon}</div>
     </div>
   );
+}
