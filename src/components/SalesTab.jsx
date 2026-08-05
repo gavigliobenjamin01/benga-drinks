@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Receipt, ShoppingBag, MapPin, Check, Plus, Tag } from 'lucide-react';
+import { Search, Receipt, ShoppingBag, MapPin, Check, Plus, Tag, Gift } from 'lucide-react';
 import { formatCurrency } from '../utils';
 
 export default function SalesTab({
@@ -29,18 +29,36 @@ export default function SalesTab({
     return saleCart.some((i) => i.type === 'promo');
   }, [saleCart]);
 
-  // CALCULAR PRECIO AUTOMÁTICO DESDE EL INVENTARIO
+  // CALCULAR PRECIO AUTOMÁTICO DESDE EL INVENTARIO DE CADA PRODUCTO
   const getItemEffectivePrice = (item) => {
-    if (!hasPromoInCart || item.type !== 'product') return item.price;
+    // Si se marcó manualmente como Regalo ($0)
+    if (item.isGift) return 0;
 
-    const comboVal = item.comboPrice ?? item.raw?.comboPrice;
-    
-    if (comboVal !== undefined && comboVal !== null && comboVal !== '') {
+    if (item.type !== 'product') return item.price;
+
+    // Buscar los datos en vivo del producto desde el inventario
+    const liveProd = products.find((p) => p.id === item.id);
+    const comboVal = liveProd?.comboPrice ?? item.comboPrice;
+
+    if (
+      hasPromoInCart &&
+      comboVal !== undefined &&
+      comboVal !== null &&
+      comboVal !== ''
+    ) {
       const num = Number(comboVal);
       if (!isNaN(num)) return num;
     }
 
     return item.price;
+  };
+
+  const toggleGift = (itemId) => {
+    setSaleCart((prev) =>
+      prev.map((item) =>
+        item.id === itemId ? { ...item, isGift: !item.isGift } : item
+      )
+    );
   };
 
   const categories = useMemo(() => {
@@ -122,7 +140,7 @@ export default function SalesTab({
       if (existing) {
         return prev.map((i) => (i.id === item.id ? { ...i, qty: i.qty + 1 } : i));
       }
-      return [...prev, { ...item, qty: 1 }];
+      return [...prev, { ...item, qty: 1, isGift: false }];
     });
   };
 
@@ -151,7 +169,7 @@ export default function SalesTab({
 
   const cartTotal = useMemo(() => {
     return saleCart.reduce((acc, i) => acc + getItemEffectivePrice(i) * i.qty, 0);
-  }, [saleCart, hasPromoInCart]);
+  }, [saleCart, hasPromoInCart, products]);
 
   const cartCostTotal = useMemo(() => {
     return saleCart.reduce((acc, item) => {
@@ -313,36 +331,63 @@ export default function SalesTab({
             ) : (
               saleCart.map((item) => {
                 const effectivePrice = getItemEffectivePrice(item);
-                const isComboPriceApplied = effectivePrice !== item.price;
+                const isComboPriceApplied = !item.isGift && effectivePrice !== item.price;
 
                 return (
-                  <div key={item.id} className="bg-slate-950/80 border border-slate-800/80 p-3 rounded-2xl flex items-center justify-between text-xs">
-                    <div className="flex-1 pr-2">
-                      <div className="flex items-center gap-1.5">
+                  <div key={item.id} className="bg-slate-950/80 border border-slate-800/80 p-3 rounded-2xl flex items-center justify-between text-xs gap-2">
+                    <div className="flex-1 pr-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <p className="font-medium text-slate-200 line-clamp-1">{item.name}</p>
-                        {isComboPriceApplied && (
+                        {item.isGift ? (
+                          <span className="bg-emerald-500/20 text-emerald-300 text-[9px] px-1.5 py-0.5 rounded-md border border-emerald-500/30 font-bold flex items-center gap-0.5">
+                            <Gift className="w-2.5 h-2.5 text-emerald-400" /> REGALO ($0)
+                          </span>
+                        ) : isComboPriceApplied ? (
                           <span className="bg-cyan-500/20 text-cyan-300 text-[9px] px-1.5 py-0.5 rounded-md border border-cyan-500/30 font-bold flex items-center gap-0.5">
                             <Tag className="w-2.5 h-2.5 text-cyan-400" /> P. COMBO
                           </span>
-                        )}
+                        ) : null}
                       </div>
-                      <div className="text-[11px] font-mono mt-0.5">
-                        {isComboPriceApplied ? (
+
+                      <div className="text-[11px] font-mono mt-0.5 flex items-center gap-2">
+                        {item.isGift ? (
                           <>
-                            <span className="line-through text-slate-500 mr-1.5">{formatCurrency(item.price)}</span>
+                            <span className="line-through text-slate-500">{formatCurrency(item.price)}</span>
+                            <span className="text-emerald-400 font-bold">$0 c/u</span>
+                          </>
+                        ) : isComboPriceApplied ? (
+                          <>
+                            <span className="line-through text-slate-500">{formatCurrency(item.price)}</span>
                             <span className="text-cyan-400 font-bold">{formatCurrency(effectivePrice)} c/u</span>
                           </>
                         ) : (
                           <span className="text-fuchsia-400">{formatCurrency(item.price)} c/u</span>
                         )}
+
+                        {item.type === 'product' && (
+                          <button
+                            onClick={() => toggleGift(item.id)}
+                            className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold border transition flex items-center gap-0.5 ${
+                              item.isGift
+                                ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                                : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-emerald-400'
+                            }`}
+                            title="Alternar entre precio normal/combo y regalo ($0)"
+                          >
+                            <Gift className="w-3 h-3" />
+                            {item.isGift ? 'Quitar Regalo' : 'Regalar'}
+                          </button>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800">
+
+                    <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800 shrink-0">
                       <button onClick={() => updateCartQty(item.id, -1)} className="text-slate-400 hover:text-white px-1 font-bold text-sm">-</button>
                       <span className="font-mono font-bold text-white px-1">{item.qty}</span>
                       <button onClick={() => updateCartQty(item.id, 1)} className="text-slate-400 hover:text-white px-1 font-bold text-sm">+</button>
                     </div>
-                    <span className="font-mono font-bold text-white ml-3 w-20 text-right">
+
+                    <span className="font-mono font-bold text-white ml-1 w-16 text-right shrink-0">
                       {formatCurrency(effectivePrice * item.qty)}
                     </span>
                   </div>
