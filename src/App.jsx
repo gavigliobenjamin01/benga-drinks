@@ -33,7 +33,8 @@ import {
   AlertTriangle,
   ShieldCheck,
   TrendingUp,
-  PieChart
+  PieChart,
+  Sparkles
 } from 'lucide-react';
 
 export default function App() {
@@ -205,7 +206,7 @@ export default function App() {
           p.id === item.id ? { ...p, stock: Math.max(0, p.stock - item.qty) } : p
         );
       } else if (item.type === 'promo') {
-        item.raw.items.forEach((comp) => {
+        item.raw.items?.forEach((comp) => {
           updatedProducts = updatedProducts.map((p) =>
             p.id === comp.productId ? { ...p, stock: Math.max(0, p.stock - comp.quantity * item.qty) } : p
           );
@@ -237,7 +238,8 @@ export default function App() {
         id: i.id,
         name: i.name,
         qty: i.qty,
-        price: i.price,
+        price: i.effectivePrice || i.price, // Usa el precio efectivo abonado (con o sin descuento de combo)
+        isDiscountApplied: i.isDiscountApplied || false,
         type: i.type,
         raw: i.raw
       }))
@@ -346,6 +348,7 @@ export default function App() {
       category: fd.get('category'),
       costPrice: parseFloat(fd.get('costPrice')),
       sellPrice: parseFloat(fd.get('sellPrice')),
+      comboPrice: parseFloat(fd.get('comboPrice')) || 0, // Nuevo campo
       stock: parseInt(fd.get('stock'), 10),
       minStock: parseInt(fd.get('minStock'), 10),
     };
@@ -360,6 +363,7 @@ export default function App() {
     const fd = new FormData(e.target);
     const newCost = parseFloat(fd.get('costPrice'));
     const newSell = parseFloat(fd.get('sellPrice'));
+    const newCombo = parseFloat(fd.get('comboPrice'));
 
     const updatedData = {
       name: fd.get('name'),
@@ -367,6 +371,7 @@ export default function App() {
       category: fd.get('category'),
       costPrice: isNaN(newCost) ? editingProduct.costPrice : newCost,
       sellPrice: isNaN(newSell) ? editingProduct.sellPrice : newSell,
+      comboPrice: isNaN(newCombo) ? (editingProduct.comboPrice || 0) : newCombo, // Nuevo campo
       minStock: parseInt(fd.get('minStock'), 10) || editingProduct.minStock
     };
 
@@ -922,36 +927,42 @@ export default function App() {
             <form onSubmit={handleAddProduct} className="space-y-3 text-xs">
               <div>
                 <label className="text-slate-400 block mb-1">Nombre del Producto:</label>
-                <input required name="name" placeholder="Ej: Vodka Absolut 750ml" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
+                <input required name="name" placeholder="Ej: Bolsa de Hielo 4kg" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-slate-400 block mb-1">Marca:</label>
-                  <input required name="brand" placeholder="Absolut" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
+                  <input required name="brand" placeholder="Ej: Rolito / Benga" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
                 </div>
                 <div>
                   <label className="text-slate-400 block mb-1">Categoría:</label>
-                  <input required name="category" placeholder="Vodka / Licor / etc." className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
+                  <input required name="category" placeholder="Ej: Hielo / Hielos / Agregados" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="text-slate-400 block mb-1">Precio Costo ($):</label>
-                  <input required type="number" step="any" name="costPrice" placeholder="10000" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono" />
+                  <input required type="number" step="any" name="costPrice" placeholder="1000" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono" />
                 </div>
                 <div>
                   <label className="text-slate-400 block mb-1">Precio Venta ($):</label>
-                  <input required type="number" step="any" name="sellPrice" placeholder="15000" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono" />
+                  <input required type="number" step="any" name="sellPrice" placeholder="2500" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono" />
+                </div>
+                <div>
+                  <label className="text-amber-400 font-bold block mb-1 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" /> Precio Combo ($):
+                  </label>
+                  <input type="number" step="any" name="comboPrice" placeholder="2000" className="w-full bg-slate-950 border border-amber-500/40 rounded-xl p-2.5 text-amber-400 font-mono font-bold" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-slate-400 block mb-1">Stock Inicial:</label>
-                  <input required type="number" name="stock" placeholder="12" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono" />
+                  <input required type="number" name="stock" placeholder="50" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono" />
                 </div>
                 <div>
                   <label className="text-slate-400 block mb-1">Stock Mínimo Alerta:</label>
-                  <input required type="number" name="minStock" placeholder="3" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono" />
+                  <input required type="number" name="minStock" placeholder="5" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono" />
                 </div>
               </div>
               <button type="submit" className="w-full bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 font-bold py-3 rounded-xl transition mt-2">Guardar Producto</button>
@@ -985,14 +996,20 @@ export default function App() {
                   <input required name="category" defaultValue={editingProduct.category} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="text-fuchsia-400 font-bold block mb-1">Precio Costo ($):</label>
+                  <label className="text-fuchsia-400 font-bold block mb-1">P. Costo ($):</label>
                   <input required type="number" step="any" name="costPrice" defaultValue={editingProduct.costPrice} className="w-full bg-slate-950 border border-fuchsia-500/50 rounded-xl p-2.5 text-white font-mono" />
                 </div>
                 <div>
-                  <label className="text-fuchsia-400 font-bold block mb-1">Precio Venta ($):</label>
+                  <label className="text-fuchsia-400 font-bold block mb-1">P. Venta ($):</label>
                   <input required type="number" step="any" name="sellPrice" defaultValue={editingProduct.sellPrice} className="w-full bg-slate-950 border border-fuchsia-500/50 rounded-xl p-2.5 text-white font-mono" />
+                </div>
+                <div>
+                  <label className="text-amber-400 font-bold block mb-1 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" /> P. Combo ($):
+                  </label>
+                  <input type="number" step="any" name="comboPrice" defaultValue={editingProduct.comboPrice || ''} placeholder="Ej: 2000" className="w-full bg-slate-950 border border-amber-500/40 rounded-xl p-2.5 text-amber-400 font-mono font-bold" />
                 </div>
               </div>
               <div>

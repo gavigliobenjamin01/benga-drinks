@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Receipt, ShoppingBag, MapPin, Check, Plus } from 'lucide-react';
+import { Search, Receipt, ShoppingBag, MapPin, Check, Plus, Tag, Sparkles } from 'lucide-react';
 import { formatCurrency } from '../utils';
 
 export default function SalesTab({
@@ -22,6 +22,11 @@ export default function SalesTab({
     if (saleCart.length > 0) {
       cartEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
+  }, [saleCart]);
+
+  // 1. Detectar si hay al menos un combo/promo en el carrito actual
+  const hasComboInCart = useMemo(() => {
+    return saleCart.some((item) => item.type === 'promo');
   }, [saleCart]);
 
   const categories = useMemo(() => {
@@ -53,6 +58,7 @@ export default function SalesTab({
             name: p.name,
             type: 'product',
             price: p.sellPrice,
+            comboPrice: p.comboPrice || p.promoPrice, // Soporta comboPrice o promoPrice
             costPrice: p.costPrice,
             stock: p.stock,
             brand: p.brand,
@@ -129,17 +135,35 @@ export default function SalesTab({
     );
   };
 
-  const cartTotal = useMemo(() => saleCart.reduce((acc, i) => acc + i.price * i.qty, 0), [saleCart]);
+  // 2. Procesar el carrito aplicando el precio de combo cuando corresponda
+  const processedCart = useMemo(() => {
+    return saleCart.map((item) => {
+      const hasComboPrice = item.type === 'product' && item.comboPrice && item.comboPrice > 0;
+      const isDiscountApplied = hasComboInCart && hasComboPrice;
+      const effectivePrice = isDiscountApplied ? item.comboPrice : item.price;
+
+      return {
+        ...item,
+        effectivePrice,
+        isDiscountApplied
+      };
+    });
+  }, [saleCart, hasComboInCart]);
+
+  // 3. Totales calculados con el precio efectivo (dinámico)
+  const cartTotal = useMemo(() => {
+    return processedCart.reduce((acc, i) => acc + i.effectivePrice * i.qty, 0);
+  }, [processedCart]);
 
   const cartCostTotal = useMemo(() => {
     return saleCart.reduce((acc, item) => {
       if (item.type === 'product') {
         return acc + item.costPrice * item.qty;
       } else if (item.type === 'promo') {
-        const promoCost = item.raw.items.reduce((pAcc, comp) => {
+        const promoCost = item.raw.items?.reduce((pAcc, comp) => {
           const prod = products.find((p) => p.id === comp.productId);
           return pAcc + (prod ? prod.costPrice * comp.quantity : 0);
-        }, 0);
+        }, 0) || 0;
         return acc + promoCost * item.qty;
       }
       return acc;
@@ -148,7 +172,7 @@ export default function SalesTab({
 
   const handleConfirmSale = () => {
     onRegisterSale({
-      saleCart,
+      saleCart: processedCart, // Enviamos el carrito con los precios promocionales ya aplicados
       selectedClient,
       paymentMethod,
       address,
@@ -201,6 +225,9 @@ export default function SalesTab({
                     return !p || p.stock < comp.quantity;
                   });
 
+            const hasComboPrice = item.type === 'product' && item.comboPrice && item.comboPrice > 0;
+            const currentDisplayPrice = (hasComboInCart && hasComboPrice) ? item.comboPrice : item.price;
+
             return (
               <div
                 key={item.id}
@@ -244,9 +271,22 @@ export default function SalesTab({
                 </div>
 
                 <div className="flex justify-between items-center pt-2 border-t border-slate-800/80">
-                  <span className={`font-mono font-bold text-sm ${isOutOfStock ? 'text-red-400' : 'text-fuchsia-400'}`}>
-                    {formatCurrency(item.price)}
-                  </span>
+                  <div className="flex flex-col">
+                    {hasComboPrice && (
+                      <span className="text-[9px] text-amber-400 font-semibold flex items-center gap-0.5">
+                        <Sparkles className="w-2.5 h-2.5" /> Combo: {formatCurrency(item.comboPrice)}
+                      </span>
+                    )}
+                    <span className={`font-mono font-bold text-sm ${
+                      isOutOfStock 
+                        ? 'text-red-400' 
+                        : (hasComboInCart && hasComboPrice) 
+                        ? 'text-amber-400 font-extrabold' 
+                        : 'text-fuchsia-400'
+                    }`}>
+                      {formatCurrency(currentDisplayPrice)}
+                    </span>
+                  </div>
                   <div className={`w-7 h-7 rounded-xl flex items-center justify-center transition shadow ${
                     isOutOfStock
                       ? 'bg-red-900/50 text-red-400 cursor-not-allowed'
@@ -278,17 +318,28 @@ export default function SalesTab({
           </div>
 
           <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto pr-1 transition-all">
-            {saleCart.length === 0 ? (
+            {processedCart.length === 0 ? (
               <div className="text-center text-slate-500 py-12 space-y-2">
                 <ShoppingBag className="w-10 h-10 mx-auto opacity-30 text-slate-400" />
                 <p className="text-xs">El carrito está vacío.<br />Selecciona los productos para agrupar en esta venta.</p>
               </div>
             ) : (
-              saleCart.map((item) => (
+              processedCart.map((item) => (
                 <div key={item.id} className="bg-slate-950/80 border border-slate-800/80 p-3 rounded-2xl flex items-center justify-between text-xs">
                   <div className="flex-1 pr-2">
                     <p className="font-medium text-slate-200 line-clamp-1">{item.name}</p>
-                    <span className="text-fuchsia-400 font-mono text-[11px]">{formatCurrency(item.price)} c/u</span>
+                    <div className="flex items-center gap-1.5">
+                      {item.isDiscountApplied ? (
+                        <>
+                          <span className="text-slate-500 line-through text-[10px] font-mono">{formatCurrency(item.price)}</span>
+                          <span className="text-amber-400 font-mono text-[11px] font-bold flex items-center gap-0.5">
+                            <Tag className="w-3 h-3" /> {formatCurrency(item.effectivePrice)} (Combo)
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-fuchsia-400 font-mono text-[11px]">{formatCurrency(item.effectivePrice)} c/u</span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800">
                     <button onClick={() => updateCartQty(item.id, -1)} className="text-slate-400 hover:text-white px-1 font-bold text-sm">-</button>
@@ -296,7 +347,7 @@ export default function SalesTab({
                     <button onClick={() => updateCartQty(item.id, 1)} className="text-slate-400 hover:text-white px-1 font-bold text-sm">+</button>
                   </div>
                   <span className="font-mono font-bold text-white ml-3 w-20 text-right">
-                    {formatCurrency(item.price * item.qty)}
+                    {formatCurrency(item.effectivePrice * item.qty)}
                   </span>
                 </div>
               ))
