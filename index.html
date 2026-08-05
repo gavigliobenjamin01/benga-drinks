@@ -1,7 +1,6 @@
 <!doctype html>
-<html lang="en">
+<html lang="es" class="dark">
   <head>
-    <script src="https://cdn.tailwindcss.com"></script>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/logo192.png" />
     <link rel="apple-touch-icon" href="/logo192.png" />
@@ -9,8 +8,16 @@
     <title>benga-drinks</title>
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#d946ef" />
+
+    <!-- CDN de Tailwind + Configuración Dark Mode -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+      }
+    </script>
   </head>
-  <body>
+  <body class="bg-slate-950 text-slate-100 min-h-screen">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
