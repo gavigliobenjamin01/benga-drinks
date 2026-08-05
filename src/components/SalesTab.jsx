@@ -1,16 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Receipt, ShoppingBag, MapPin, Check, Plus, Snowflake, Gift, GlassWater } from 'lucide-react';
+import { Search, Receipt, ShoppingBag, MapPin, Check, Plus, Tag } from 'lucide-react';
 import { formatCurrency } from '../utils';
-
-// Función para recuperar configuración guardada
-const getSavedState = (key, defaultValue) => {
-  try {
-    const saved = localStorage.getItem(key);
-    return saved !== null ? JSON.parse(saved) : defaultValue;
-  } catch (e) {
-    return defaultValue;
-  }
-};
 
 export default function SalesTab({
   products,
@@ -26,32 +16,7 @@ export default function SalesTab({
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('Todas');
 
-  // CONFIGURACIÓN PERSISTENTE DE HIELO (SE GUARDA AUTOMÁTICAMENTE)
-  const [iceCustomPrice, setIceCustomPrice] = useState(() => getSavedState('benga_ice_price', 0));
-  const [isIcePriceCustomized, setIsIcePriceCustomized] = useState(() => getSavedState('benga_ice_active', true));
-
-  // CONFIGURACIÓN PERSISTENTE DE VASO (SE GUARDA AUTOMÁTICAMENTE)
-  const [glassCustomPrice, setGlassCustomPrice] = useState(() => getSavedState('benga_glass_price', 0));
-  const [isGlassPriceCustomized, setIsGlassPriceCustomized] = useState(() => getSavedState('benga_glass_active', true));
-
   const cartEndRef = useRef(null);
-
-  // GUARDAR CONFIGURACIONES EN MEMORIA DEL NAVEGADOR
-  useEffect(() => {
-    localStorage.setItem('benga_ice_price', JSON.stringify(iceCustomPrice));
-  }, [iceCustomPrice]);
-
-  useEffect(() => {
-    localStorage.setItem('benga_ice_active', JSON.stringify(isIcePriceCustomized));
-  }, [isIcePriceCustomized]);
-
-  useEffect(() => {
-    localStorage.setItem('benga_glass_price', JSON.stringify(glassCustomPrice));
-  }, [glassCustomPrice]);
-
-  useEffect(() => {
-    localStorage.setItem('benga_glass_active', JSON.stringify(isGlassPriceCustomized));
-  }, [isGlassPriceCustomized]);
 
   useEffect(() => {
     if (saleCart.length > 0) {
@@ -64,22 +29,17 @@ export default function SalesTab({
     return saleCart.some((i) => i.type === 'promo');
   }, [saleCart]);
 
-  // CALCULAR PRECIO EFECTIVO
+  // SI HAY PROMO Y EL PRODUCTO TIENE REGISTRADO UN P. COMBO, USA ESE PRECIO
   const getItemEffectivePrice = (item) => {
-    if (!hasPromoInCart || item.type !== 'product') return item.price;
-
-    const nameLower = item.name.toLowerCase();
-    const isIce = nameLower.includes('hielo');
-    const isGlass = nameLower.includes('vaso');
-
-    if (isIce && isIcePriceCustomized) {
-      return Math.max(0, parseFloat(iceCustomPrice) || 0);
+    if (
+      hasPromoInCart &&
+      item.type === 'product' &&
+      item.comboPrice !== undefined &&
+      item.comboPrice !== null &&
+      item.comboPrice !== ''
+    ) {
+      return item.comboPrice;
     }
-
-    if (isGlass && isGlassPriceCustomized) {
-      return Math.max(0, parseFloat(glassCustomPrice) || 0);
-    }
-
     return item.price;
   };
 
@@ -112,6 +72,7 @@ export default function SalesTab({
             name: p.name,
             type: 'product',
             price: p.sellPrice,
+            comboPrice: p.comboPrice,
             costPrice: p.costPrice,
             stock: p.stock,
             brand: p.brand,
@@ -190,7 +151,7 @@ export default function SalesTab({
 
   const cartTotal = useMemo(() => {
     return saleCart.reduce((acc, i) => acc + getItemEffectivePrice(i) * i.qty, 0);
-  }, [saleCart, hasPromoInCart, iceCustomPrice, isIcePriceCustomized, glassCustomPrice, isGlassPriceCustomized]);
+  }, [saleCart, hasPromoInCart]);
 
   const cartCostTotal = useMemo(() => {
     return saleCart.reduce((acc, item) => {
@@ -226,9 +187,6 @@ export default function SalesTab({
       }
     });
   };
-
-  const hasIceInCart = saleCart.some((i) => i.type === 'product' && i.name.toLowerCase().includes('hielo'));
-  const hasGlassInCart = saleCart.some((i) => i.type === 'product' && i.name.toLowerCase().includes('vaso'));
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -346,7 +304,7 @@ export default function SalesTab({
             )}
           </div>
 
-          <div className="space-y-2 mt-4 max-h-[280px] overflow-y-auto pr-1 transition-all">
+          <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto pr-1 transition-all">
             {saleCart.length === 0 ? (
               <div className="text-center text-slate-500 py-12 space-y-2">
                 <ShoppingBag className="w-10 h-10 mx-auto opacity-30 text-slate-400" />
@@ -355,22 +313,21 @@ export default function SalesTab({
             ) : (
               saleCart.map((item) => {
                 const effectivePrice = getItemEffectivePrice(item);
-                const hasDiscount = effectivePrice < item.price;
+                const isComboPriceApplied = effectivePrice !== item.price;
 
                 return (
                   <div key={item.id} className="bg-slate-950/80 border border-slate-800/80 p-3 rounded-2xl flex items-center justify-between text-xs">
                     <div className="flex-1 pr-2">
                       <div className="flex items-center gap-1.5">
                         <p className="font-medium text-slate-200 line-clamp-1">{item.name}</p>
-                        {hasDiscount && (
+                        {isComboPriceApplied && (
                           <span className="bg-cyan-500/20 text-cyan-300 text-[9px] px-1.5 py-0.5 rounded-md border border-cyan-500/30 font-bold flex items-center gap-0.5">
-                            {effectivePrice === 0 ? <Gift className="w-2.5 h-2.5 text-emerald-400" /> : <Snowflake className="w-2.5 h-2.5 text-cyan-400" />}
-                            {effectivePrice === 0 ? 'REGALO ($0)' : 'PRECIO COMBO'}
+                            <Tag className="w-2.5 h-2.5 text-cyan-400" /> P. COMBO
                           </span>
                         )}
                       </div>
                       <div className="text-[11px] font-mono mt-0.5">
-                        {hasDiscount ? (
+                        {isComboPriceApplied ? (
                           <>
                             <span className="line-through text-slate-500 mr-1.5">{formatCurrency(item.price)}</span>
                             <span className="text-cyan-400 font-bold">{formatCurrency(effectivePrice)} c/u</span>
@@ -394,99 +351,6 @@ export default function SalesTab({
             )}
           </div>
         </div>
-
-        {/* CONTROLES INTERACTIVOS PARA PRECIOS DE COMBO (HIELO Y VASO) */}
-        {hasPromoInCart && (hasIceInCart || hasGlassInCart) && (
-          <div className="space-y-2">
-            {/* PANEL DE HIELO */}
-            {hasIceInCart && (
-              <div className="bg-cyan-950/40 border border-cyan-500/40 p-3 rounded-2xl text-xs space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-cyan-300 flex items-center gap-1.5 text-[11px]">
-                    <Snowflake className="w-4 h-4 text-cyan-400" /> Hielo con Combo:
-                  </span>
-                  <button
-                    onClick={() => setIsIcePriceCustomized(!isIcePriceCustomized)}
-                    className="text-[10px] text-slate-400 hover:text-cyan-300 underline font-medium"
-                  >
-                    {isIcePriceCustomized ? 'Usar Precio Normal' : 'Activar Precio Combo'}
-                  </button>
-                </div>
-
-                {isIcePriceCustomized && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      onClick={() => setIceCustomPrice(0)}
-                      className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border transition flex items-center gap-1 ${
-                        parseFloat(iceCustomPrice) === 0
-                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
-                          : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-600'
-                      }`}
-                    >
-                      <Gift className="w-3.5 h-3.5" /> 🎁 Regalo ($0)
-                    </button>
-
-                    <div className="flex-1 relative">
-                      <span className="absolute left-2.5 top-1.5 text-slate-400 font-bold">$</span>
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Precio combo..."
-                        value={iceCustomPrice}
-                        onChange={(e) => setIceCustomPrice(e.target.value)}
-                        className="w-full bg-slate-900 border border-cyan-500/50 rounded-xl pl-6 pr-2 py-1.5 text-xs text-cyan-300 font-mono font-bold focus:outline-none focus:border-cyan-400"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* PANEL DE VASO */}
-            {hasGlassInCart && (
-              <div className="bg-purple-950/40 border border-purple-500/40 p-3 rounded-2xl text-xs space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-purple-300 flex items-center gap-1.5 text-[11px]">
-                    <GlassWater className="w-4 h-4 text-purple-400" /> Vaso con Combo:
-                  </span>
-                  <button
-                    onClick={() => setIsGlassPriceCustomized(!isGlassPriceCustomized)}
-                    className="text-[10px] text-slate-400 hover:text-purple-300 underline font-medium"
-                  >
-                    {isGlassPriceCustomized ? 'Usar Precio Normal' : 'Activar Precio Combo'}
-                  </button>
-                </div>
-
-                {isGlassPriceCustomized && (
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      onClick={() => setGlassCustomPrice(0)}
-                      className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border transition flex items-center gap-1 ${
-                        parseFloat(glassCustomPrice) === 0
-                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
-                          : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-600'
-                      }`}
-                    >
-                      <Gift className="w-3.5 h-3.5" /> 🎁 Regalo ($0)
-                    </button>
-
-                    <div className="flex-1 relative">
-                      <span className="absolute left-2.5 top-1.5 text-slate-400 font-bold">$</span>
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder="Precio combo..."
-                        value={glassCustomPrice}
-                        onChange={(e) => setGlassCustomPrice(e.target.value)}
-                        className="w-full bg-slate-900 border border-purple-500/50 rounded-xl pl-6 pr-2 py-1.5 text-xs text-purple-300 font-mono font-bold focus:outline-none focus:border-purple-400"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="space-y-4 pt-4 border-t border-slate-800">
           <div>

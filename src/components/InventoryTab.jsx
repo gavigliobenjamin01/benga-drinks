@@ -76,6 +76,7 @@ export default function InventoryTab({
                 <th className="p-4">Categoría</th>
                 <th className="p-4 font-mono">Costo</th>
                 <th className="p-4 font-mono">P. Venta</th>
+                <th className="p-4 font-mono text-cyan-400">P. Combo</th>
                 <th className="p-4 text-center">Stock Actual</th>
                 <th className="p-4 text-center">Ajuste Rápido</th>
                 <th className="p-4 text-center">Acciones</th>
@@ -84,7 +85,7 @@ export default function InventoryTab({
             <tbody className="divide-y divide-slate-800/60">
               {sortedAndFilteredInventory.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="p-8 text-center text-slate-500 text-xs">
+                  <td colSpan="8" className="p-8 text-center text-slate-500 text-xs">
                     No hay productos para mostrar en esta categoría.
                   </td>
                 </tr>
@@ -106,6 +107,11 @@ export default function InventoryTab({
                       </td>
                       <td className="p-4 font-mono text-slate-300">{formatCurrency(p.costPrice)}</td>
                       <td className="p-4 font-mono text-fuchsia-400 font-bold">{formatCurrency(p.sellPrice)}</td>
+                      <td className="p-4 font-mono text-cyan-400 font-bold">
+                        {p.comboPrice !== undefined && p.comboPrice !== null && p.comboPrice !== ''
+                          ? formatCurrency(p.comboPrice)
+                          : '-'}
+                      </td>
                       <td className="p-4 text-center">
                         <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
                           isLowStock
