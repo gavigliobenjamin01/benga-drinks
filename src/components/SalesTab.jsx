@@ -31,12 +31,9 @@ export default function SalesTab({
 
   // CALCULAR PRECIO AUTOMÁTICO DESDE EL INVENTARIO DE CADA PRODUCTO
   const getItemEffectivePrice = (item) => {
-    // Si se marcó manualmente como Regalo ($0)
     if (item.isGift) return 0;
-
     if (item.type !== 'product') return item.price;
 
-    // Buscar los datos en vivo del producto desde el inventario
     const liveProd = products.find((p) => p.id === item.id);
     const comboVal = liveProd?.comboPrice ?? item.comboPrice;
 
