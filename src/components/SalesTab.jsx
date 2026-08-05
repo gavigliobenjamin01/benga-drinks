@@ -308,7 +308,7 @@ export default function SalesTab({
           <div className="flex justify-between items-center pb-4 border-b border-slate-800">
             <div>
               <h2 className="font-bold text-base text-white flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-fuchsia-400" /> Ticket de Venta
+                <Receipt className="w-5 h-5 text-fuchsia-400" /> Ticket de Venta (PROBANDO)
               </h2>
               <p className="text-[11px] text-slate-400">Todos los productos cargados se registrarán en esta sola venta</p>
             </div>
