@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Receipt, ShoppingBag, MapPin, Check, Plus, Tag, Sparkles } from 'lucide-react';
+import { Search, Receipt, ShoppingBag, MapPin, Check, Plus, Snowflake, Gift, Pencil } from 'lucide-react';
 import { formatCurrency } from '../utils';
 
 export default function SalesTab({
@@ -16,6 +16,10 @@ export default function SalesTab({
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('Todas');
 
+  // ESTADO PARA EL PRECIO PERSONALIZADO DEL HIELO EN EL COMBO
+  const [iceCustomPrice, setIceCustomPrice] = useState(0); // Por defecto $0 (Regalo)
+  const [isIcePriceCustomized, setIsIcePriceCustomized] = useState(true);
+
   const cartEndRef = useRef(null);
 
   useEffect(() => {
@@ -24,10 +28,19 @@ export default function SalesTab({
     }
   }, [saleCart]);
 
-  // 1. Detectar si hay al menos un combo/promo en el carrito actual
-  const hasComboInCart = useMemo(() => {
-    return saleCart.some((item) => item.type === 'promo');
+  // DETECTAR SI HAY AL MENOS UNA PROMO/COMBO EN EL CARRITO
+  const hasPromoInCart = useMemo(() => {
+    return saleCart.some((i) => i.type === 'promo');
   }, [saleCart]);
+
+  // CALCULAR PRECIO EFECTIVO DE CADA ÍTEM
+  const getItemEffectivePrice = (item) => {
+    const isIce = item.name.toLowerCase().includes('hielo');
+    if (hasPromoInCart && item.type === 'product' && isIce && isIcePriceCustomized) {
+      return Math.max(0, parseFloat(iceCustomPrice) || 0);
+    }
+    return item.price;
+  };
 
   const categories = useMemo(() => {
     const prodCats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
@@ -58,7 +71,6 @@ export default function SalesTab({
             name: p.name,
             type: 'product',
             price: p.sellPrice,
-            comboPrice: p.comboPrice || p.promoPrice, // Soporta comboPrice o promoPrice
             costPrice: p.costPrice,
             stock: p.stock,
             brand: p.brand,
@@ -135,35 +147,19 @@ export default function SalesTab({
     );
   };
 
-  // 2. Procesar el carrito aplicando el precio de combo cuando corresponda
-  const processedCart = useMemo(() => {
-    return saleCart.map((item) => {
-      const hasComboPrice = item.type === 'product' && item.comboPrice && item.comboPrice > 0;
-      const isDiscountApplied = hasComboInCart && hasComboPrice;
-      const effectivePrice = isDiscountApplied ? item.comboPrice : item.price;
-
-      return {
-        ...item,
-        effectivePrice,
-        isDiscountApplied
-      };
-    });
-  }, [saleCart, hasComboInCart]);
-
-  // 3. Totales calculados con el precio efectivo (dinámico)
   const cartTotal = useMemo(() => {
-    return processedCart.reduce((acc, i) => acc + i.effectivePrice * i.qty, 0);
-  }, [processedCart]);
+    return saleCart.reduce((acc, i) => acc + getItemEffectivePrice(i) * i.qty, 0);
+  }, [saleCart, hasPromoInCart, iceCustomPrice, isIcePriceCustomized]);
 
   const cartCostTotal = useMemo(() => {
     return saleCart.reduce((acc, item) => {
       if (item.type === 'product') {
         return acc + item.costPrice * item.qty;
       } else if (item.type === 'promo') {
-        const promoCost = item.raw.items?.reduce((pAcc, comp) => {
+        const promoCost = item.raw.items.reduce((pAcc, comp) => {
           const prod = products.find((p) => p.id === comp.productId);
           return pAcc + (prod ? prod.costPrice * comp.quantity : 0);
-        }, 0) || 0;
+        }, 0);
         return acc + promoCost * item.qty;
       }
       return acc;
@@ -171,8 +167,13 @@ export default function SalesTab({
   }, [saleCart, products]);
 
   const handleConfirmSale = () => {
+    const updatedCartForSale = saleCart.map((i) => ({
+      ...i,
+      price: getItemEffectivePrice(i)
+    }));
+
     onRegisterSale({
-      saleCart: processedCart, // Enviamos el carrito con los precios promocionales ya aplicados
+      saleCart: updatedCartForSale,
       selectedClient,
       paymentMethod,
       address,
@@ -184,6 +185,8 @@ export default function SalesTab({
       }
     });
   };
+
+  const hasIceInCart = saleCart.some((i) => i.type === 'product' && i.name.toLowerCase().includes('hielo'));
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -224,9 +227,6 @@ export default function SalesTab({
                     const p = products.find((prod) => prod.id === comp.productId);
                     return !p || p.stock < comp.quantity;
                   });
-
-            const hasComboPrice = item.type === 'product' && item.comboPrice && item.comboPrice > 0;
-            const currentDisplayPrice = (hasComboInCart && hasComboPrice) ? item.comboPrice : item.price;
 
             return (
               <div
@@ -271,22 +271,9 @@ export default function SalesTab({
                 </div>
 
                 <div className="flex justify-between items-center pt-2 border-t border-slate-800/80">
-                  <div className="flex flex-col">
-                    {hasComboPrice && (
-                      <span className="text-[9px] text-amber-400 font-semibold flex items-center gap-0.5">
-                        <Sparkles className="w-2.5 h-2.5" /> Combo: {formatCurrency(item.comboPrice)}
-                      </span>
-                    )}
-                    <span className={`font-mono font-bold text-sm ${
-                      isOutOfStock 
-                        ? 'text-red-400' 
-                        : (hasComboInCart && hasComboPrice) 
-                        ? 'text-amber-400 font-extrabold' 
-                        : 'text-fuchsia-400'
-                    }`}>
-                      {formatCurrency(currentDisplayPrice)}
-                    </span>
-                  </div>
+                  <span className={`font-mono font-bold text-sm ${isOutOfStock ? 'text-red-400' : 'text-fuchsia-400'}`}>
+                    {formatCurrency(item.price)}
+                  </span>
                   <div className={`w-7 h-7 rounded-xl flex items-center justify-center transition shadow ${
                     isOutOfStock
                       ? 'bg-red-900/50 text-red-400 cursor-not-allowed'
@@ -317,43 +304,98 @@ export default function SalesTab({
             )}
           </div>
 
-          <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto pr-1 transition-all">
-            {processedCart.length === 0 ? (
+          <div className="space-y-2 mt-4 max-h-[280px] overflow-y-auto pr-1 transition-all">
+            {saleCart.length === 0 ? (
               <div className="text-center text-slate-500 py-12 space-y-2">
                 <ShoppingBag className="w-10 h-10 mx-auto opacity-30 text-slate-400" />
                 <p className="text-xs">El carrito está vacío.<br />Selecciona los productos para agrupar en esta venta.</p>
               </div>
             ) : (
-              processedCart.map((item) => (
-                <div key={item.id} className="bg-slate-950/80 border border-slate-800/80 p-3 rounded-2xl flex items-center justify-between text-xs">
-                  <div className="flex-1 pr-2">
-                    <p className="font-medium text-slate-200 line-clamp-1">{item.name}</p>
-                    <div className="flex items-center gap-1.5">
-                      {item.isDiscountApplied ? (
-                        <>
-                          <span className="text-slate-500 line-through text-[10px] font-mono">{formatCurrency(item.price)}</span>
-                          <span className="text-amber-400 font-mono text-[11px] font-bold flex items-center gap-0.5">
-                            <Tag className="w-3 h-3" /> {formatCurrency(item.effectivePrice)} (Combo)
+              saleCart.map((item) => {
+                const effectivePrice = getItemEffectivePrice(item);
+                const hasDiscount = effectivePrice < item.price;
+
+                return (
+                  <div key={item.id} className="bg-slate-950/80 border border-slate-800/80 p-3 rounded-2xl flex items-center justify-between text-xs">
+                    <div className="flex-1 pr-2">
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-medium text-slate-200 line-clamp-1">{item.name}</p>
+                        {hasDiscount && (
+                          <span className="bg-cyan-500/20 text-cyan-300 text-[9px] px-1.5 py-0.5 rounded-md border border-cyan-500/30 font-bold flex items-center gap-0.5">
+                            {effectivePrice === 0 ? <Gift className="w-2.5 h-2.5 text-emerald-400" /> : <Snowflake className="w-2.5 h-2.5 text-cyan-400" />}
+                            {effectivePrice === 0 ? 'REGALO ($0)' : 'PRECIO ESPECIAL'}
                           </span>
-                        </>
-                      ) : (
-                        <span className="text-fuchsia-400 font-mono text-[11px]">{formatCurrency(item.effectivePrice)} c/u</span>
-                      )}
+                        )}
+                      </div>
+                      <div className="text-[11px] font-mono mt-0.5">
+                        {hasDiscount ? (
+                          <>
+                            <span className="line-through text-slate-500 mr-1.5">{formatCurrency(item.price)}</span>
+                            <span className="text-cyan-400 font-bold">{formatCurrency(effectivePrice)} c/u</span>
+                          </>
+                        ) : (
+                          <span className="text-fuchsia-400">{formatCurrency(item.price)} c/u</span>
+                        )}
+                      </div>
                     </div>
+                    <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800">
+                      <button onClick={() => updateCartQty(item.id, -1)} className="text-slate-400 hover:text-white px-1 font-bold text-sm">-</button>
+                      <span className="font-mono font-bold text-white px-1">{item.qty}</span>
+                      <button onClick={() => updateCartQty(item.id, 1)} className="text-slate-400 hover:text-white px-1 font-bold text-sm">+</button>
+                    </div>
+                    <span className="font-mono font-bold text-white ml-3 w-20 text-right">
+                      {formatCurrency(effectivePrice * item.qty)}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800">
-                    <button onClick={() => updateCartQty(item.id, -1)} className="text-slate-400 hover:text-white px-1 font-bold text-sm">-</button>
-                    <span className="font-mono font-bold text-white px-1">{item.qty}</span>
-                    <button onClick={() => updateCartQty(item.id, 1)} className="text-slate-400 hover:text-white px-1 font-bold text-sm">+</button>
-                  </div>
-                  <span className="font-mono font-bold text-white ml-3 w-20 text-right">
-                    {formatCurrency(item.effectivePrice * item.qty)}
-                  </span>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
+
+        {/* PANEL INTERACTIVO DE CONFIGURACIÓN DE PRECIO DE HIELO EN EL TICKET */}
+        {hasPromoInCart && hasIceInCart && (
+          <div className="bg-cyan-950/40 border border-cyan-500/40 p-3 rounded-2xl text-xs space-y-2.5">
+            <div className="flex justify-between items-center">
+              <span className="font-bold text-cyan-300 flex items-center gap-1.5 text-[11px]">
+                <Snowflake className="w-4 h-4 text-cyan-400" /> Hielo con Combo (Precio Especial):
+              </span>
+              <button
+                onClick={() => setIsIcePriceCustomized(!isIcePriceCustomized)}
+                className="text-[10px] text-slate-400 hover:text-cyan-300 underline font-medium"
+              >
+                {isIcePriceCustomized ? 'Usar Precio Normal' : 'Activar Precio Combo'}
+              </button>
+            </div>
+
+            {isIcePriceCustomized && (
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={() => setIceCustomPrice(0)}
+                  className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border transition flex items-center gap-1 ${
+                    parseFloat(iceCustomPrice) === 0
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
+                      : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-slate-600'
+                  }`}
+                >
+                  <Gift className="w-3.5 h-3.5" /> 🎁 Regalo ($0)
+                </button>
+
+                <div className="flex-1 relative">
+                  <span className="absolute left-2.5 top-1.5 text-slate-400 font-bold">$</span>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Precio especial..."
+                    value={iceCustomPrice}
+                    onChange={(e) => setIceCustomPrice(e.target.value)}
+                    className="w-full bg-slate-900 border border-cyan-500/50 rounded-xl pl-6 pr-2 py-1.5 text-xs text-cyan-300 font-mono font-bold focus:outline-none focus:border-cyan-400"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="space-y-4 pt-4 border-t border-slate-800">
           <div>
