@@ -29,17 +29,17 @@ export default function SalesTab({
     return saleCart.some((i) => i.type === 'promo');
   }, [saleCart]);
 
-  // SI HAY PROMO Y EL PRODUCTO TIENE REGISTRADO UN P. COMBO, USA ESE PRECIO
+  // CALCULAR PRECIO AUTOMÁTICO DESDE EL INVENTARIO
   const getItemEffectivePrice = (item) => {
-    if (
-      hasPromoInCart &&
-      item.type === 'product' &&
-      item.comboPrice !== undefined &&
-      item.comboPrice !== null &&
-      item.comboPrice !== ''
-    ) {
-      return item.comboPrice;
+    if (!hasPromoInCart || item.type !== 'product') return item.price;
+
+    const comboVal = item.comboPrice ?? item.raw?.comboPrice;
+    
+    if (comboVal !== undefined && comboVal !== null && comboVal !== '') {
+      const num = Number(comboVal);
+      if (!isNaN(num)) return num;
     }
+
     return item.price;
   };
 
