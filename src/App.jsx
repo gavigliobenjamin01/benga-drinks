@@ -136,11 +136,23 @@ export default function App() {
     await setDoc(doc(db, 'settings', 'config'), { salaryPercentage: newVal }, { merge: true });
   };
 
-  // --- CÁLCULO DE MÉTRICAS GLOBALES ---
+  // --- CÁLCULO DE MÉTRICAS GLOBALES CON DESGLOSE DE PAGO ---
   const metrics = useMemo(() => {
     const rawRevenue = sales.reduce((acc, s) => acc + s.total, 0);
     const totalSalesCost = sales.reduce((acc, s) => acc + s.cost, 0);
     const merchandiseExpenses = stockEntries.reduce((acc, e) => acc + (e.totalCost || 0), 0);
+
+    const efectivoRevenue = sales
+      .filter((s) => s.paymentMethod === 'Efectivo')
+      .reduce((acc, s) => acc + s.total, 0);
+
+    const transferenciaRevenue = sales
+      .filter((s) => s.paymentMethod === 'Transferencia')
+      .reduce((acc, s) => acc + s.total, 0);
+
+    const fiadoRevenue = sales
+      .filter((s) => s.paymentMethod === 'Fiado')
+      .reduce((acc, s) => acc + s.total, 0);
 
     const totalRevenue = rawRevenue - merchandiseExpenses;
     const netProfit = rawRevenue - totalSalesCost - merchandiseExpenses;
@@ -161,6 +173,9 @@ export default function App() {
       stockValuation,
       merchandiseExpenses,
       rawRevenue,
+      efectivoRevenue,
+      transferenciaRevenue,
+      fiadoRevenue,
       totalSalaryProfit,
       totalWithdrawn,
       availableToWithdraw
@@ -227,7 +242,6 @@ export default function App() {
       }
     }
 
-    // CÁLCULO DE GANANCIA REAL (Descontando Extra que sale de tu bolsillo)
     const productsRevenue = cartTotal - shippingFee;
     const netProfit = productsRevenue - cartCostTotal - driverExtra;
 
@@ -240,9 +254,9 @@ export default function App() {
       shippingFee,
       driverExtra,
       driverTotal: shippingFee + driverExtra,
-      total: cartTotal, // Total cobrado al cliente (Productos + Envío)
+      total: cartTotal,
       cost: cartCostTotal,
-      profit: netProfit, // Tu ganancia real
+      profit: netProfit,
       items: saleCart.map((i) => ({
         id: i.id,
         name: i.name,
@@ -548,6 +562,23 @@ export default function App() {
     notify(`📦 Ingreso de mercadería registrado (${formatCurrency(costVal)}) y stock actualizado`);
   };
 
+  // ELIMINAR INGRESO Y RESTAURAR STOCK
+  const handleDeleteStockEntry = async (entryId) => {
+    const entryToDelete = stockEntries.find((e) => e.id === entryId);
+    if (!entryToDelete) return;
+
+    for (const item of entryToDelete.items || []) {
+      const currentProd = products.find((p) => p.id === item.id);
+      if (currentProd) {
+        const newStock = Math.max(0, currentProd.stock - item.qty);
+        await updateDoc(doc(db, 'products', item.id), { stock: newStock });
+      }
+    }
+
+    await deleteDoc(doc(db, 'stock_entries', entryId));
+    notify('🗑️ Ingreso de mercadería eliminado y stock descontado');
+  };
+
   const handleRegisterWithdrawal = async (e) => {
     e.preventDefault();
     const amount = parseFloat(withdrawInput) || 0;
@@ -648,6 +679,7 @@ export default function App() {
         {activeTab === 'stock_entry' && (
           <StockEntryTab
             products={products}
+            stockEntries={stockEntries}
             entrySearchTerm={entrySearchTerm}
             setEntrySearchTerm={setEntrySearchTerm}
             entryCart={entryCart}
@@ -657,6 +689,7 @@ export default function App() {
             entryTotalCostInput={entryTotalCostInput}
             setEntryTotalCostInput={setEntryTotalCostInput}
             handleRegisterStockEntry={handleRegisterStockEntry}
+            handleDeleteStockEntry={handleDeleteStockEntry}
           />
         )}
 
@@ -669,8 +702,6 @@ export default function App() {
           />
         )}
       </main>
-
-      {/* --- MODALES GLOBALES --- */}
 
       {/* MODAL RETIRO DE PLATA */}
       {showWithdrawModal && (
