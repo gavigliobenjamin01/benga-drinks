@@ -13,6 +13,8 @@ export default function SalesTab({
   const [selectedClient, setSelectedClient] = useState('Cliente Casual');
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
   const [address, setAddress] = useState('');
+  const [shippingFee, setShippingFee] = useState(''); // Monto cobrado por envío
+  const [driverExtra, setDriverExtra] = useState(''); // Plata extra asignada al cadete
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('Todas');
 
@@ -44,7 +46,7 @@ export default function SalesTab({
       comboVal !== ''
     ) {
       const num = Number(comboVal);
-      if (!isNaN(num)) return num;
+      if (!isNaN(num) && num > 0) return num;
     }
 
     return item.price;
@@ -168,6 +170,16 @@ export default function SalesTab({
     return saleCart.reduce((acc, i) => acc + getItemEffectivePrice(i) * i.qty, 0);
   }, [saleCart, hasPromoInCart, products]);
 
+  // TOTAL FINAL A COBRAR AL CLIENTE (Productos + Envío)
+  const finalTotal = useMemo(() => {
+    return cartTotal + (parseFloat(shippingFee) || 0);
+  }, [cartTotal, shippingFee]);
+
+  // TOTAL QUE SE LE ENTREGA AL REPARTIDOR (Envío + Extra)
+  const totalForDriver = useMemo(() => {
+    return (parseFloat(shippingFee) || 0) + (parseFloat(driverExtra) || 0);
+  }, [shippingFee, driverExtra]);
+
   const cartCostTotal = useMemo(() => {
     return saleCart.reduce((acc, item) => {
       if (item.type === 'product') {
@@ -194,11 +206,15 @@ export default function SalesTab({
       selectedClient,
       paymentMethod,
       address,
-      cartTotal,
+      shippingFee: parseFloat(shippingFee) || 0,
+      driverExtra: parseFloat(driverExtra) || 0,
+      cartTotal: finalTotal,
       cartCostTotal,
       clearCart: () => {
         setSaleCart([]);
         setAddress('');
+        setShippingFee('');
+        setDriverExtra('');
       }
     });
   };
@@ -308,8 +324,7 @@ export default function SalesTab({
           <div className="flex justify-between items-center pb-4 border-b border-slate-800">
             <div>
               <h2 className="font-bold text-base text-white flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-fuchsia-400" /> Ticket de Venta 
-                
+                <Receipt className="w-5 h-5 text-fuchsia-400" /> Ticket de Venta
               </h2>
               <p className="text-[11px] text-slate-400">Todos los productos cargados se registrarán en esta sola venta</p>
             </div>
@@ -320,7 +335,7 @@ export default function SalesTab({
             )}
           </div>
 
-          <div className="space-y-2 mt-4 max-h-[300px] overflow-y-auto pr-1 transition-all">
+          <div className="space-y-2 mt-4 max-h-[280px] overflow-y-auto pr-1 transition-all">
             {saleCart.length === 0 ? (
               <div className="text-center text-slate-500 py-12 space-y-2">
                 <ShoppingBag className="w-10 h-10 mx-auto opacity-30 text-slate-400" />
@@ -449,10 +464,51 @@ export default function SalesTab({
             />
           </div>
 
+          {/* CAMPOS DE ENVÍO Y EXTRA CADETE */}
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+            <div>
+              <label className="text-[11px] text-slate-400 block mb-1 font-medium">
+                🚚 Costo Envío ($):
+              </label>
+              <input
+                type="number"
+                step="any"
+                placeholder="0"
+                value={shippingFee}
+                onChange={(e) => setShippingFee(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white font-mono focus:outline-none focus:border-fuchsia-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] text-amber-400 block mb-1 font-medium">
+                🎁 Extra Cadete ($):
+              </label>
+              <input
+                type="number"
+                step="any"
+                placeholder="0"
+                value={driverExtra}
+                onChange={(e) => setDriverExtra(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-amber-300 font-mono focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          {/* RESUMEN PAGO AL REPARTIDOR */}
+          {totalForDriver > 0 && (
+            <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 flex justify-between items-center text-xs">
+              <span className="text-slate-400">Total a entregar al Cadete:</span>
+              <span className="font-mono font-bold text-amber-400">
+                {formatCurrency(totalForDriver)}
+              </span>
+            </div>
+          )}
+
           <div className="bg-slate-950/90 p-4 rounded-2xl border border-slate-800 flex justify-between items-center">
             <span className="text-xs text-slate-400 font-semibold uppercase">Total a Cobrar:</span>
             <span className="font-mono font-bold text-2xl text-fuchsia-400">
-              {formatCurrency(cartTotal)}
+              {formatCurrency(finalTotal)}
             </span>
           </div>
 

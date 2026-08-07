@@ -188,6 +188,8 @@ export default function App() {
     selectedClient,
     paymentMethod,
     address,
+    shippingFee = 0,
+    driverExtra = 0,
     cartTotal,
     cartCostTotal,
     clearCart
@@ -225,15 +227,22 @@ export default function App() {
       }
     }
 
+    // CÁLCULO DE GANANCIA REAL (Descontando Extra que sale de tu bolsillo)
+    const productsRevenue = cartTotal - shippingFee;
+    const netProfit = productsRevenue - cartCostTotal - driverExtra;
+
     const newSale = {
       id: `V-${Date.now().toString().slice(-4)}`,
       date: new Date().toISOString(),
       client: selectedClient,
       paymentMethod,
       address: address.trim() || '',
-      total: cartTotal,
+      shippingFee,
+      driverExtra,
+      driverTotal: shippingFee + driverExtra,
+      total: cartTotal, // Total cobrado al cliente (Productos + Envío)
       cost: cartCostTotal,
-      profit: cartTotal - cartCostTotal,
+      profit: netProfit, // Tu ganancia real
       items: saleCart.map((i) => ({
         id: i.id,
         name: i.name,
