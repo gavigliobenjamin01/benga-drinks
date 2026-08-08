@@ -143,24 +143,38 @@ export default function DashboardTab({
                     <span className="text-slate-500 font-mono text-[10px]">{sale.id}</span>
                   </div>
 
-                  {/* ETIQUETAS CON TOOLTIP / DESCRIPCIÓN EN HOVER */}
-                  <div className="flex flex-wrap gap-1.5 my-1.5">
+                  {/* ETIQUETAS CON TOOLTIP PERSONALIZADO VIOLETA */}
+                  <div className="flex flex-wrap gap-1.5 my-2">
                     {sale.items?.map((item, idx) => {
                       const promoObj = promos.find((p) => p.id === item.id || p.name === item.name);
                       const promoDesc = item.raw?.description || promoObj?.description || '';
 
                       return (
-                        <span
-                          key={idx}
-                          title={promoDesc ? `🛍️ Incluye: ${promoDesc}` : item.name}
-                          className={`px-2 py-0.5 rounded-lg text-[11px] font-medium border cursor-help transition ${
-                            item.type === 'promo' || promoObj
-                              ? 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/40 hover:bg-fuchsia-500/30 font-semibold'
-                              : 'bg-slate-900 text-slate-300 border-slate-800'
-                          }`}
-                        >
-                          {item.qty}x {item.name}
-                        </span>
+                        <div key={idx} className="relative group/tooltip inline-block">
+                          <span
+                            className={`px-2.5 py-1 rounded-xl text-[11px] font-medium border transition cursor-pointer flex items-center gap-1 ${
+                              item.type === 'promo' || promoObj
+                                ? 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/40 hover:bg-fuchsia-500/30 font-bold shadow-sm shadow-fuchsia-500/10'
+                                : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            {item.qty}x {item.name}
+                          </span>
+
+                          {/* MINI CARTEL FLOTANTE VIOLETA */}
+                          {promoDesc && (
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:flex flex-col items-center z-50 pointer-events-none transition-all duration-200">
+                              <div className="bg-slate-950/95 border border-fuchsia-500/60 text-fuchsia-200 text-[11px] py-1.5 px-3 rounded-xl shadow-2xl shadow-fuchsia-950/80 whitespace-nowrap backdrop-blur-md font-medium flex items-center gap-1.5">
+                                <span className="text-fuchsia-400 font-bold uppercase text-[9px] bg-fuchsia-500/20 px-1.5 py-0.5 rounded border border-fuchsia-500/30">
+                                  Incluye
+                                </span>
+                                <span>{promoDesc}</span>
+                              </div>
+                              {/* Flechita inferior del cartelito */}
+                              <div className="w-2 h-2 bg-slate-950 border-r border-b border-fuchsia-500/60 rotate-45 -mt-1 shadow-sm"></div>
+                            </div>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
