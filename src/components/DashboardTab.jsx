@@ -14,6 +14,8 @@ import { formatCurrency, formatDate } from '../utils';
 export default function DashboardTab({
   sales,
   metrics,
+  promos = [],
+  products = [],
   setShowWithdrawModal,
   setShowBoxesModal,
   setSaleToPayModal,
@@ -141,9 +143,27 @@ export default function DashboardTab({
                     <span className="text-slate-500 font-mono text-[10px]">{sale.id}</span>
                   </div>
 
-                  <p className="text-slate-300 text-[11px]">
-                    {sale.items?.map((i) => `${i.qty}x ${i.name}`).join(', ')}
-                  </p>
+                  {/* ETIQUETAS CON TOOLTIP / DESCRIPCIÓN EN HOVER */}
+                  <div className="flex flex-wrap gap-1.5 my-1.5">
+                    {sale.items?.map((item, idx) => {
+                      const promoObj = promos.find((p) => p.id === item.id || p.name === item.name);
+                      const promoDesc = item.raw?.description || promoObj?.description || '';
+
+                      return (
+                        <span
+                          key={idx}
+                          title={promoDesc ? `🛍️ Incluye: ${promoDesc}` : item.name}
+                          className={`px-2 py-0.5 rounded-lg text-[11px] font-medium border cursor-help transition ${
+                            item.type === 'promo' || promoObj
+                              ? 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/40 hover:bg-fuchsia-500/30 font-semibold'
+                              : 'bg-slate-900 text-slate-300 border-slate-800'
+                          }`}
+                        >
+                          {item.qty}x {item.name}
+                        </span>
+                      );
+                    })}
+                  </div>
 
                   {sale.address && (
                     <span className="text-slate-400 text-[10px] flex items-center gap-1">
