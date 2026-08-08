@@ -136,17 +136,20 @@ export default function App() {
     await setDoc(doc(db, 'settings', 'config'), { salaryPercentage: newVal }, { merge: true });
   };
 
-  // --- CÁLCULO DE MÉTRICAS GLOBALES CON DESGLOSE DE PAGO ---
+  // --- CÁLCULO DE MÉTRICAS GLOBALES (SOLO VENTAS YA PAGADAS) ---
   const metrics = useMemo(() => {
-    const rawRevenue = sales.reduce((acc, s) => acc + s.total, 0);
-    const totalSalesCost = sales.reduce((acc, s) => acc + s.cost, 0);
+    // FILTRAMOS SOLO LAS VENTAS QUE NO SEAN FIADAS (EFECTIVO O TRANSFERENCIA)
+    const paidSales = sales.filter((s) => s.paymentMethod !== 'Fiado');
+
+    const rawRevenue = paidSales.reduce((acc, s) => acc + s.total, 0);
+    const totalSalesCost = paidSales.reduce((acc, s) => acc + s.cost, 0);
     const merchandiseExpenses = stockEntries.reduce((acc, e) => acc + (e.totalCost || 0), 0);
 
-    const efectivoRevenue = sales
+    const efectivoRevenue = paidSales
       .filter((s) => s.paymentMethod === 'Efectivo')
       .reduce((acc, s) => acc + s.total, 0);
 
-    const transferenciaRevenue = sales
+    const transferenciaRevenue = paidSales
       .filter((s) => s.paymentMethod === 'Transferencia')
       .reduce((acc, s) => acc + s.total, 0);
 
@@ -562,7 +565,6 @@ export default function App() {
     notify(`📦 Ingreso de mercadería registrado (${formatCurrency(costVal)}) y stock actualizado`);
   };
 
-  // ELIMINAR INGRESO Y RESTAURAR STOCK
   const handleDeleteStockEntry = async (entryId) => {
     const entryToDelete = stockEntries.find((e) => e.id === entryId);
     if (!entryToDelete) return;
