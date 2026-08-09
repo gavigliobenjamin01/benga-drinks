@@ -199,11 +199,17 @@ export default function SalesTab({
         type: 'image/png'
       });
 
+      // ARMAR EL MENSAJE PERSONALIZADO SEGÚN EL CLIENTE
+      const clientName = ticketModalData.client;
+      const customText = clientName && clientName !== 'Cliente Casual'
+        ? `¡Muchas gracias, ${clientName}! 🙌🍹 Acá te dejo el ticket de tu pedido ✨`
+        : `¡Muchas gracias! 🙌🍹 Acá te dejo tu ticket ✨`;
+
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
           title: 'Ticket de Compra - Benga Drinks',
-          text: `¡Hola ${ticketModalData.client}! Acá tenés el comprobante de tu pedido. 🍹`
+          text: customText
         });
       } else {
         handleDownloadImage();
@@ -437,7 +443,7 @@ export default function SalesTab({
               </button>
             </div>
 
-            {/* VISTA PREVIA DEL TICKET (LO QUE SE TRANSFORMA EN IMAGEN) */}
+            {/* VISTA PREVIA DEL TICKET */}
             <div className="overflow-hidden rounded-2xl shadow-2xl">
               <div
                 ref={ticketRef}
