@@ -119,39 +119,39 @@ export default function SalesTab({
   const cartCostTotal = cart.reduce((acc, i) => acc + i.cost * i.qty, 0);
   const cartTotal = itemsTotal + shippingFee;
 
-  // ARMAR EL TEXTO DETALLADO DEL TICKET
+  // ARMAR EL TEXTO DETALLADO DEL TICKET (SIN CARACTERES QUE GENEREN PRGUNTAS '?')
   const buildTicketText = (saleData) => {
     const clientObj = clients.find((c) => c.name === saleData.client);
 
     let itemsFormatted = saleData.items
       .map((i) => {
-        let line = `• ${i.qty}x ${i.name}`;
+        let line = `🔹 ${i.qty}x ${i.name} ($${(i.price * i.qty).toLocaleString('es-AR')})`;
         if (i.raw?.description) {
-          line += `\n   └─ Incluye: ${i.raw.description}`;
+          line += `\n   (Incluye: ${i.raw.description})`;
         }
-        line += ` ($${(i.price * i.qty).toLocaleString('es-AR')})`;
         return line;
       })
       .join('\n');
 
-    let text = `🍹 *BENGA DRINKS - DETALLE DE COMPRA* 🍹\n`;
-    text += `----------------------------------------\n`;
+    let text = `🍹 *BENGA DRINKS* 🍹\n`;
+    text += `🧾 *DETALLE DE COMPRA*\n`;
+    text += `==============================\n`;
     text += `👤 *Cliente:* ${saleData.client}\n`;
-    text += `💳 *Medio de Pago:* ${saleData.paymentMethod}\n`;
+    text += `💵 *Medio de Pago:* ${saleData.paymentMethod}\n`;
     if (saleData.address) {
-      text += `📍 *Dirección de Envío:* ${saleData.address}\n`;
+      text += `📍 *Dirección:* ${saleData.address}\n`;
     }
-    text += `----------------------------------------\n`;
-    text += `📦 *PRODUCTOS:* \n${itemsFormatted}\n`;
+    text += `==============================\n`;
+    text += `🛍️ *PRODUCTOS:*\n${itemsFormatted}\n`;
 
     if (saleData.shippingFee > 0) {
       text += `🛵 *Envío:* $${saleData.shippingFee.toLocaleString('es-AR')}\n`;
     }
 
-    text += `----------------------------------------\n`;
+    text += `==============================\n`;
     text += `💰 *TOTAL FINAL:* $${saleData.total.toLocaleString('es-AR')}\n`;
-    text += `----------------------------------------\n`;
-    text += `¡Muchas gracias por tu compra! 🙌✨`;
+    text += `==============================\n`;
+    text += `🙌 ¡Muchas gracias por tu compra! ✨`;
 
     return { text, phone: clientObj?.phone || '' };
   };
