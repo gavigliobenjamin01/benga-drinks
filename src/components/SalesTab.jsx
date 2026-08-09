@@ -1,163 +1,109 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, Receipt, ShoppingBag, MapPin, Check, Plus, Tag, Gift } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import {
+  Search,
+  Plus,
+  Trash2,
+  Send,
+  Copy,
+  Check,
+  X,
+  Sparkles,
+  ShoppingBag,
+  MapPin,
+  UserCheck,
+  DollarSign
+} from 'lucide-react';
 import { formatCurrency } from '../utils';
 
 export default function SalesTab({
-  products,
-  promos,
-  clients,
+  products = [],
+  promos = [],
+  clients = [],
   onRegisterSale,
   notify
 }) {
-  const [saleCart, setSaleCart] = useState([]);
+  const [cart, setCart] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [selectedClient, setSelectedClient] = useState('Cliente Casual');
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
   const [address, setAddress] = useState('');
-  const [shippingFee, setShippingFee] = useState(''); // Monto cobrado por envío
-  const [driverExtra, setDriverExtra] = useState(''); // Plata extra asignada al cadete
-  const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('Todas');
+  const [shippingFeeInput, setShippingFeeInput] = useState('');
+  const [driverExtraInput, setDriverExtraInput] = useState('');
 
-  const cartEndRef = useRef(null);
+  // ESTADO PARA MODAL DE ENVIAR TICKET LUEGO DE VENDER
+  const [ticketModalData, setTicketModalData] = useState(null);
+  const [isCopied, setIsCopied] = useState(false);
 
-  useEffect(() => {
-    if (saleCart.length > 0) {
-      cartEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }, [saleCart]);
-
-  // DETECTAR SI HAY AL MENOS UNA PROMO/COMBO EN EL CARRITO
-  const hasPromoInCart = useMemo(() => {
-    return saleCart.some((i) => i.type === 'promo');
-  }, [saleCart]);
-
-  // CALCULAR PRECIO AUTOMÁTICO DESDE EL INVENTARIO DE CADA PRODUCTO
-  const getItemEffectivePrice = (item) => {
-    if (item.isGift) return 0;
-    if (item.type !== 'product') return item.price;
-
-    const liveProd = products.find((p) => p.id === item.id);
-    const comboVal = liveProd?.comboPrice ?? item.comboPrice;
-
-    if (
-      hasPromoInCart &&
-      comboVal !== undefined &&
-      comboVal !== null &&
-      comboVal !== ''
-    ) {
-      const num = Number(comboVal);
-      if (!isNaN(num) && num > 0) return num;
-    }
-
-    return item.price;
-  };
-
-  const toggleGift = (itemId) => {
-    setSaleCart((prev) =>
-      prev.map((item) =>
-        item.id === itemId ? { ...item, isGift: !item.isGift } : item
-      )
-    );
-  };
-
+  // OBTENER CATEGORÍAS
   const categories = useMemo(() => {
-    const prodCats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
-    return ['Todas', 'Promociones', ...prodCats];
+    const cats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
+    return ['Todas', 'Promos', ...cats];
   }, [products]);
 
-  const availableItems = useMemo(() => {
-    let items = [];
+  // FILTRAR CATÁLOGO
+  const filteredCatalog = useMemo(() => {
+    const term = searchTerm.toLowerCase();
 
-    if (categoryFilter === 'Todas' || categoryFilter === 'Promociones') {
-      promos.filter(p => p.active).forEach(p => {
-        items.push({
-          id: p.id,
-          name: p.name,
-          type: 'promo',
-          price: p.price,
-          description: p.description,
-          raw: p
-        });
-      });
+    if (selectedCategory === 'Promos') {
+      return promos
+        .filter((pr) => pr.active && pr.name?.toLowerCase().includes(term))
+        .map((pr) => ({ ...pr, isPromo: true }));
     }
 
-    if (categoryFilter !== 'Promociones') {
-      products.forEach(p => {
-        if (categoryFilter === 'Todas' || p.category === categoryFilter) {
-          items.push({
-            id: p.id,
-            name: p.name,
-            type: 'product',
-            price: p.sellPrice,
-            comboPrice: p.comboPrice,
-            costPrice: p.costPrice,
-            stock: p.stock,
-            brand: p.brand,
-            category: p.category,
-            raw: p
-          });
-        }
-      });
+    let prods = products.filter(
+      (p) =>
+        p.name?.toLowerCase().includes(term) ||
+        p.brand?.toLowerCase().includes(term) ||
+        p.category?.toLowerCase().includes(term)
+    );
+
+    if (selectedCategory !== 'Todas') {
+      prods = prods.filter((p) => p.category === selectedCategory);
     }
 
-    if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase();
-      items = items.filter(i => i.name.toLowerCase().includes(term));
-    }
+    return prods.map((p) => ({ ...p, isPromo: false }));
+  }, [products, promos, searchTerm, selectedCategory]);
 
-    return items;
-  }, [products, promos, categoryFilter, searchTerm]);
-
-  const addToSaleCart = (item) => {
-    if (item.type === 'product' && item.stock <= 0) {
-      notify('⚠️ Producto sin stock disponible');
-      return;
-    }
-
-    if (item.type === 'promo') {
-      const hasNoStock = item.raw.items?.some((comp) => {
-        const p = products.find((prod) => prod.id === comp.productId);
-        return !p || p.stock < comp.quantity;
-      });
-      if (hasNoStock) {
-        notify('⚠️ Promoción sin stock disponible');
-        return;
-      }
-    }
-
-    setSaleCart((prev) => {
-      const existing = prev.find((i) => i.id === item.id);
-      
-      if (item.type === 'product') {
-        const currentQtyInCart = existing ? existing.qty : 0;
-        if (currentQtyInCart + 1 > item.stock) {
-          notify(`⚠️ Alcanzaste el límite de stock de ${item.name}`);
-          return prev;
-        }
-      }
-
+  // AGREGAR AL CARRITO
+  const addToCart = (item) => {
+    setCart((prev) => {
+      const existing = prev.find((i) => i.id === item.id && i.isPromo === item.isPromo);
       if (existing) {
-        return prev.map((i) => (i.id === item.id ? { ...i, qty: i.qty + 1 } : i));
+        return prev.map((i) =>
+          i.id === item.id && i.isPromo === item.isPromo ? { ...i, qty: i.qty + 1 } : i
+        );
       }
-      return [...prev, { ...item, qty: 1, isGift: false }];
+
+      let price = item.isPromo ? item.price : item.sellPrice;
+      let cost = item.isPromo
+        ? (item.items || []).reduce((acc, comp) => {
+            const pObj = products.find((p) => p.id === comp.productId);
+            return acc + (pObj ? pObj.costPrice * comp.quantity : 0);
+          }, 0)
+        : item.costPrice;
+
+      return [
+        ...prev,
+        {
+          id: item.id,
+          name: item.name,
+          price,
+          cost,
+          qty: 1,
+          type: item.isPromo ? 'promo' : 'product',
+          raw: item
+        }
+      ];
     });
   };
 
-  const updateCartQty = (id, delta) => {
-    setSaleCart((prev) =>
+  const updateQty = (id, isPromo, delta) => {
+    setCart((prev) =>
       prev
         .map((item) => {
-          if (item.id === id) {
+          if (item.id === id && (item.type === 'promo') === isPromo) {
             const newQty = item.qty + delta;
-
-            if (delta > 0 && item.type === 'product') {
-              const prod = products.find((p) => p.id === item.id);
-              if (prod && newQty > prod.stock) {
-                notify(`⚠️ No hay suficiente stock para agregar más ${item.name}`);
-                return item;
-              }
-            }
-
             return newQty <= 0 ? null : { ...item, qty: newQty };
           }
           return item;
@@ -166,367 +112,374 @@ export default function SalesTab({
     );
   };
 
-  const cartTotal = useMemo(() => {
-    return saleCart.reduce((acc, i) => acc + getItemEffectivePrice(i) * i.qty, 0);
-  }, [saleCart, hasPromoInCart, products]);
+  // CÁLCULOS DE CARRITO
+  const shippingFee = parseFloat(shippingFeeInput) || 0;
+  const driverExtra = parseFloat(driverExtraInput) || 0;
+  const itemsTotal = cart.reduce((acc, i) => acc + i.price * i.qty, 0);
+  const cartCostTotal = cart.reduce((acc, i) => acc + i.cost * i.qty, 0);
+  const cartTotal = itemsTotal + shippingFee;
 
-  // TOTAL FINAL A COBRAR AL CLIENTE (Productos + Envío)
-  const finalTotal = useMemo(() => {
-    return cartTotal + (parseFloat(shippingFee) || 0);
-  }, [cartTotal, shippingFee]);
+  // ARMAR EL TEXTO DETALLADO DEL TICKET
+  const buildTicketText = (saleData) => {
+    const clientObj = clients.find((c) => c.name === saleData.client);
 
-  // TOTAL QUE SE LE ENTREGA AL REPARTIDOR (Envío + Extra)
-  const totalForDriver = useMemo(() => {
-    return (parseFloat(shippingFee) || 0) + (parseFloat(driverExtra) || 0);
-  }, [shippingFee, driverExtra]);
+    let itemsFormatted = saleData.items
+      .map((i) => {
+        let line = `• ${i.qty}x ${i.name}`;
+        // Si es promo, agregamos el desglose de lo que trae
+        if (i.raw?.description) {
+          line += `\n   └─ Incluye: ${i.raw.description}`;
+        }
+        line += ` ($${(i.price * i.qty).toLocaleString('es-AR')})`;
+        return line;
+      })
+      .join('\n');
 
-  const cartCostTotal = useMemo(() => {
-    return saleCart.reduce((acc, item) => {
-      if (item.type === 'product') {
-        return acc + item.costPrice * item.qty;
-      } else if (item.type === 'promo') {
-        const promoCost = item.raw.items.reduce((pAcc, comp) => {
-          const prod = products.find((p) => p.id === comp.productId);
-          return pAcc + (prod ? prod.costPrice * comp.quantity : 0);
-        }, 0);
-        return acc + promoCost * item.qty;
-      }
-      return acc;
-    }, 0);
-  }, [saleCart, products]);
+    let text = `🍹 *BENGA DRINKS - DETALLE DE COMPRA* 🍹\n`;
+    text += `----------------------------------------\n`;
+    text += `👤 *Cliente:* ${saleData.client}\n`;
+    text += `💳 *Medio de Pago:* ${saleData.paymentMethod}\n`;
+    if (saleData.address) {
+      text += `📍 *Dirección de Envío:* ${saleData.address}\n`;
+    }
+    text += `----------------------------------------\n`;
+    text += `📦 *PRODUCTOS:* \n${itemsFormatted}\n`;
 
-  const handleConfirmSale = () => {
-    const updatedCartForSale = saleCart.map((i) => ({
-      ...i,
-      price: getItemEffectivePrice(i)
-    }));
+    if (saleData.shippingFee > 0) {
+      text += `🛵 *Envío:* $${saleData.shippingFee.toLocaleString('es-AR')}\n`;
+    }
 
-    onRegisterSale({
-      saleCart: updatedCartForSale,
+    text += `----------------------------------------\n`;
+    text += `💰 *TOTAL FINAL:* $${saleData.total.toLocaleString('es-AR')}\n`;
+    text += `----------------------------------------\n`;
+    text += `¡Muchas gracias por tu compra! 🙌✨`;
+
+    return { text, phone: clientObj?.phone || '' };
+  };
+
+  // REGISTRAR LA VENTA
+  const handleSubmitSale = () => {
+    if (cart.length === 0) return;
+
+    const salePayload = {
+      saleCart: cart,
       selectedClient,
       paymentMethod,
       address,
-      shippingFee: parseFloat(shippingFee) || 0,
-      driverExtra: parseFloat(driverExtra) || 0,
-      cartTotal: finalTotal,
+      shippingFee,
+      driverExtra,
+      cartTotal,
       cartCostTotal,
       clearCart: () => {
-        setSaleCart([]);
+        setCart([]);
         setAddress('');
-        setShippingFee('');
-        setDriverExtra('');
+        setShippingFeeInput('');
+        setDriverExtraInput('');
       }
-    });
+    };
+
+    // Ejecutamos el registro en Firebase
+    onRegisterSale(salePayload);
+
+    // Armamos los datos del ticket para abrir el modal
+    const preparedSale = {
+      client: selectedClient,
+      paymentMethod,
+      address,
+      items: cart,
+      shippingFee,
+      total: cartTotal
+    };
+
+    const { text, phone } = buildTicketText(preparedSale);
+    setTicketModalData({ text, phone });
+  };
+
+  const handleCopyTicket = () => {
+    if (!ticketModalData) return;
+    navigator.clipboard.writeText(ticketModalData.text);
+    setIsCopied(true);
+    notify('📋 Ticket copiado al portapapeles');
+    setTimeout(() => setIsCopied(false), 2500);
+  };
+
+  const handleSendWhatsApp = () => {
+    if (!ticketModalData) return;
+    const cleanPhone = ticketModalData.phone.replace(/[^0-9]/g, '');
+    const encodedText = encodeURIComponent(ticketModalData.text);
+
+    let url = cleanPhone
+      ? `https://wa.me/${cleanPhone}?text=${encodedText}`
+      : `https://wa.me/?text=${encodedText}`;
+
+    window.open(url, '_blank');
   };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-      <div className="lg:col-span-7 space-y-5">
-        <div className="relative">
-          <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Buscar producto por nombre o promo..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-slate-900/90 border border-slate-800 rounded-2xl pl-10 pr-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-fuchsia-500 transition"
-          />
-        </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setCategoryFilter(cat)}
-              className={`whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-                categoryFilter === cat
-                  ? 'bg-fuchsia-500 text-slate-950 border-fuchsia-500 font-bold shadow-md shadow-fuchsia-500/20'
-                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {availableItems.map((item) => {
-            const isOutOfStock =
-              item.type === 'product'
-                ? item.stock <= 0
-                : item.raw.items?.some((comp) => {
-                    const p = products.find((prod) => prod.id === comp.productId);
-                    return !p || p.stock < comp.quantity;
-                  });
-
-            return (
-              <div
-                key={item.id}
-                onClick={() => !isOutOfStock && addToSaleCart(item)}
-                className={`p-4 rounded-2xl transition-all flex flex-col justify-between space-y-3 group ${
-                  isOutOfStock
-                    ? 'bg-red-950/30 border border-red-500/60 opacity-80 cursor-not-allowed'
-                    : 'bg-slate-900/80 border border-slate-800 hover:border-fuchsia-500/50 cursor-pointer hover:scale-[1.02]'
-                }`}
-              >
-                <div>
-                  <div className="flex justify-between items-start gap-1">
-                    <span className={`text-[10px] uppercase font-bold tracking-wider ${isOutOfStock ? 'text-red-400' : 'text-slate-500'}`}>
-                      {item.type === 'promo' ? 'PROMO' : item.brand}
-                    </span>
-                    {item.type === 'product' && (
-                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
-                        item.stock <= 0
-                          ? 'bg-red-500 text-slate-950 border border-red-400 font-extrabold'
-                          : item.stock <= item.raw.minStock
-                          ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                          : 'bg-slate-800 text-slate-400'
-                      }`}>
-                        {item.stock <= 0 ? 'Sin Stock' : `Stock: ${item.stock}`}
-                      </span>
-                    )}
-                    {item.type === 'promo' && isOutOfStock && (
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full font-bold bg-red-500 text-slate-950 border border-red-400 font-extrabold">
-                        Sin Stock
-                      </span>
-                    )}
-                  </div>
-                  <h3 className={`font-semibold text-xs mt-1 line-clamp-2 transition ${isOutOfStock ? 'text-red-300 font-bold' : 'text-slate-100 group-hover:text-fuchsia-400'}`}>
-                    {item.name}
-                  </h3>
-                  {item.description && (
-                    <p className={`text-[10px] line-clamp-2 mt-1 ${isOutOfStock ? 'text-red-400/80' : 'text-slate-400'}`}>
-                      {item.description}
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex justify-between items-center pt-2 border-t border-slate-800/80">
-                  <span className={`font-mono font-bold text-sm ${isOutOfStock ? 'text-red-400' : 'text-fuchsia-400'}`}>
-                    {formatCurrency(item.price)}
-                  </span>
-                  <div className={`w-7 h-7 rounded-xl flex items-center justify-center transition shadow ${
-                    isOutOfStock
-                      ? 'bg-red-900/50 text-red-400 cursor-not-allowed'
-                      : 'bg-slate-800 group-hover:bg-fuchsia-500 group-hover:text-slate-950 text-slate-300'
-                  }`}>
-                    <Plus className="w-4 h-4 stroke-[3]" />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-3xl p-5 flex flex-col justify-between space-y-5 shadow-xl">
-        <div>
-          <div className="flex justify-between items-center pb-4 border-b border-slate-800">
-            <div>
-              <h2 className="font-bold text-base text-white flex items-center gap-2">
-                <Receipt className="w-5 h-5 text-fuchsia-400" /> Ticket de Venta
-              </h2>
-              <p className="text-[11px] text-slate-400">Todos los productos cargados se registrarán en esta sola venta</p>
-            </div>
-            {saleCart.length > 0 && (
-              <button onClick={() => setSaleCart([])} className="text-xs text-red-400 hover:underline font-medium">
-                Vaciar
-              </button>
-            )}
-          </div>
-
-          <div className="space-y-2 mt-4 max-h-[280px] overflow-y-auto pr-1 transition-all">
-            {saleCart.length === 0 ? (
-              <div className="text-center text-slate-500 py-12 space-y-2">
-                <ShoppingBag className="w-10 h-10 mx-auto opacity-30 text-slate-400" />
-                <p className="text-xs">El carrito está vacío.<br />Selecciona los productos para agrupar en esta venta.</p>
-              </div>
-            ) : (
-              saleCart.map((item) => {
-                const effectivePrice = getItemEffectivePrice(item);
-                const isComboPriceApplied = !item.isGift && effectivePrice !== item.price;
-
-                return (
-                  <div key={item.id} className="bg-slate-950/80 border border-slate-800/80 p-3 rounded-2xl flex items-center justify-between text-xs gap-2">
-                    <div className="flex-1 pr-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <p className="font-medium text-slate-200 line-clamp-1">{item.name}</p>
-                        {item.isGift ? (
-                          <span className="bg-emerald-500/20 text-emerald-300 text-[9px] px-1.5 py-0.5 rounded-md border border-emerald-500/30 font-bold flex items-center gap-0.5">
-                            <Gift className="w-2.5 h-2.5 text-emerald-400" /> REGALO ($0)
-                          </span>
-                        ) : isComboPriceApplied ? (
-                          <span className="bg-cyan-500/20 text-cyan-300 text-[9px] px-1.5 py-0.5 rounded-md border border-cyan-500/30 font-bold flex items-center gap-0.5">
-                            <Tag className="w-2.5 h-2.5 text-cyan-400" /> P. COMBO
-                          </span>
-                        ) : null}
-                      </div>
-
-                      <div className="text-[11px] font-mono mt-0.5 flex items-center gap-2">
-                        {item.isGift ? (
-                          <>
-                            <span className="line-through text-slate-500">{formatCurrency(item.price)}</span>
-                            <span className="text-emerald-400 font-bold">$0 c/u</span>
-                          </>
-                        ) : isComboPriceApplied ? (
-                          <>
-                            <span className="line-through text-slate-500">{formatCurrency(item.price)}</span>
-                            <span className="text-cyan-400 font-bold">{formatCurrency(effectivePrice)} c/u</span>
-                          </>
-                        ) : (
-                          <span className="text-fuchsia-400">{formatCurrency(item.price)} c/u</span>
-                        )}
-
-                        {item.type === 'product' && (
-                          <button
-                            onClick={() => toggleGift(item.id)}
-                            className={`px-1.5 py-0.5 rounded-lg text-[10px] font-bold border transition flex items-center gap-0.5 ${
-                              item.isGift
-                                ? 'bg-emerald-500 text-slate-950 border-emerald-400'
-                                : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-emerald-400'
-                            }`}
-                            title="Alternar entre precio normal/combo y regalo ($0)"
-                          >
-                            <Gift className="w-3 h-3" />
-                            {item.isGift ? 'Quitar Regalo' : 'Regalar'}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800 shrink-0">
-                      <button onClick={() => updateCartQty(item.id, -1)} className="text-slate-400 hover:text-white px-1 font-bold text-sm">-</button>
-                      <span className="font-mono font-bold text-white px-1">{item.qty}</span>
-                      <button onClick={() => updateCartQty(item.id, 1)} className="text-slate-400 hover:text-white px-1 font-bold text-sm">+</button>
-                    </div>
-
-                    <span className="font-mono font-bold text-white ml-1 w-16 text-right shrink-0">
-                      {formatCurrency(effectivePrice * item.qty)}
-                    </span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-4 pt-4 border-t border-slate-800">
-          <div>
-            <label className="text-xs text-slate-400 block mb-1.5 font-medium">Cliente:</label>
-            <select
-              value={selectedClient}
-              onChange={(e) => setSelectedClient(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-fuchsia-500"
-            >
-              <option value="Cliente Casual">Cliente Casual / Ocasional</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.name}>{c.name}</option>
-              ))}
-            </select>
-            {paymentMethod === 'Fiado' && selectedClient === 'Cliente Casual' && (
-              <p className="text-[11px] text-amber-400 font-medium mt-1 flex items-center gap-1">
-                ⚠️ Para fiar debés seleccionar un cliente registrado.
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="text-xs text-slate-400 block mb-1.5 font-medium">Medio de Pago:</label>
-            <div className="grid grid-cols-3 gap-2">
-              {['Efectivo', 'Transferencia', 'Fiado'].map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setPaymentMethod(m)}
-                  className={`py-2 px-2 rounded-xl text-xs font-semibold border transition ${
-                    paymentMethod === m
-                      ? m === 'Fiado'
-                        ? 'bg-amber-500/20 border-amber-500 text-amber-400 font-bold'
-                        : 'bg-fuchsia-500/10 border-fuchsia-500 text-fuchsia-400 font-bold'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs text-slate-400 block mb-1.5 font-medium flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5 text-fuchsia-400" /> Dirección de Entrega (Opcional):
-            </label>
+      {/* LADO IZQUIERDO: CATÁLOGO Y BUSCADOR */}
+      <div className="lg:col-span-7 space-y-4">
+        {/* BUSCADOR Y FILTROS DE CATEGORÍAS */}
+        <div className="space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Ej: Av. San Martín 1234, CABA"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-fuchsia-500"
+              placeholder="Buscar fernet, vodka, hielo, combos..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-slate-900/90 border border-slate-800 rounded-2xl pl-10 pr-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-fuchsia-500 transition"
             />
           </div>
 
-          {/* CAMPOS DE ENVÍO Y EXTRA CADETE */}
-          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition border ${
+                  selectedCategory === cat
+                    ? 'bg-fuchsia-500 text-slate-950 border-fuchsia-400 shadow-md shadow-fuchsia-500/20'
+                    : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                {cat === 'Promos' ? '🔥 Promos & Combos' : cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* GRILLA DE PRODUCTOS Y PROMOS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
+          {filteredCatalog.map((item) => (
+            <div
+              key={item.id}
+              onClick={() => addToCart(item)}
+              className={`border p-3.5 rounded-2xl cursor-pointer transition flex items-center justify-between group hover:scale-[1.01] ${
+                item.isPromo
+                  ? 'bg-fuchsia-950/20 border-fuchsia-500/40 hover:border-fuchsia-400'
+                  : 'bg-slate-900/80 border-slate-800 hover:border-fuchsia-500/50'
+              }`}
+            >
+              <div className="space-y-1 flex-1 pr-2">
+                <span className="text-[10px] uppercase font-bold text-slate-500">
+                  {item.isPromo ? '🔥 Combo / Promo' : item.brand}
+                </span>
+                <h3 className="font-semibold text-xs text-slate-100 group-hover:text-fuchsia-400 line-clamp-1">
+                  {item.name}
+                </h3>
+                {item.description && (
+                  <p className="text-[10px] text-fuchsia-300 line-clamp-1">
+                    ✨ {item.description}
+                  </p>
+                )}
+                <div className="font-mono text-sm font-bold text-emerald-400">
+                  {formatCurrency(item.isPromo ? item.price : item.sellPrice)}
+                </div>
+              </div>
+
+              <div className="w-8 h-8 rounded-xl bg-slate-800 group-hover:bg-fuchsia-500 group-hover:text-slate-950 text-slate-300 flex items-center justify-center transition shadow">
+                <Plus className="w-4 h-4 stroke-[3]" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* LADO DERECHO: TICKET Y REGISTRO DE VENTA */}
+      <div className="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl">
+        <div className="flex justify-between items-center pb-3 border-b border-slate-800">
+          <h2 className="font-bold text-base text-white flex items-center gap-2">
+            <ShoppingBag className="w-5 h-5 text-fuchsia-400" /> Venta Actual
+          </h2>
+          {cart.length > 0 && (
+            <button onClick={() => setCart([])} className="text-xs text-red-400 hover:underline">
+              Vaciar
+            </button>
+          )}
+        </div>
+
+        {/* LISTADO DEL CARRITO */}
+        <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+          {cart.length === 0 ? (
+            <p className="text-xs text-slate-500 text-center py-8">
+              Seleccioná productos o combos de la izquierda para sumar a la venta.
+            </p>
+          ) : (
+            cart.map((item) => (
+              <div
+                key={`${item.id}-${item.type}`}
+                className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80 flex items-center justify-between text-xs"
+              >
+                <div className="truncate flex-1 pr-2">
+                  <span className="font-semibold text-slate-100 block truncate">{item.name}</span>
+                  <span className="font-mono text-emerald-400 text-[11px]">
+                    {formatCurrency(item.price * item.qty)}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800">
+                  <button
+                    onClick={() => updateQty(item.id, item.type === 'promo', -1)}
+                    className="text-slate-400 hover:text-white px-1 font-bold"
+                  >
+                    -
+                  </button>
+                  <span className="font-mono font-bold text-white px-1">{item.qty}</span>
+                  <button
+                    onClick={() => updateQty(item.id, item.type === 'promo', 1)}
+                    className="text-slate-400 hover:text-white px-1 font-bold"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* DATOS DEL CLIENTE Y ENVÍO */}
+        <div className="space-y-3 pt-3 border-t border-slate-800 text-xs">
+          <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[11px] text-slate-400 block mb-1 font-medium">
-                🚚 Costo Envío ($):
+              <label className="text-slate-400 block mb-1 font-medium flex items-center gap-1">
+                <UserCheck className="w-3.5 h-3.5 text-fuchsia-400" /> Cliente:
               </label>
-              <input
-                type="number"
-                step="any"
-                placeholder="0"
-                value={shippingFee}
-                onChange={(e) => setShippingFee(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white font-mono focus:outline-none focus:border-fuchsia-500"
-              />
+              <select
+                value={selectedClient}
+                onChange={(e) => setSelectedClient(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-white font-medium focus:outline-none focus:border-fuchsia-500"
+              >
+                <option value="Cliente Casual">Cliente Casual</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
-              <label className="text-[11px] text-amber-400 block mb-1 font-medium">
-                🎁 Extra Cadete ($):
+              <label className="text-slate-400 block mb-1 font-medium flex items-center gap-1">
+                <DollarSign className="w-3.5 h-3.5 text-emerald-400" /> Medio de Pago:
               </label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-white font-medium focus:outline-none focus:border-fuchsia-500"
+              >
+                <option value="Efectivo">💵 Efectivo</option>
+                <option value="Transferencia">💳 Transferencia / MP</option>
+                <option value="Fiado">📝 Fiado (Deuda)</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-slate-400 block mb-1 font-medium flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-fuchsia-400" /> Dirección de Envío (Opcional):
+            </label>
+            <input
+              type="text"
+              placeholder="Ej: Calle San Martín 1234, Dpto 2B"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-white focus:outline-none focus:border-fuchsia-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-slate-400 block mb-1 font-medium">Costo Envío ($):</label>
               <input
                 type="number"
-                step="any"
                 placeholder="0"
-                value={driverExtra}
-                onChange={(e) => setDriverExtra(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-amber-300 font-mono focus:outline-none focus:border-amber-500"
+                value={shippingFeeInput}
+                onChange={(e) => setShippingFeeInput(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-white font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-slate-400 block mb-1 font-medium">Extra Delivery ($):</label>
+              <input
+                type="number"
+                placeholder="0"
+                value={driverExtraInput}
+                onChange={(e) => setDriverExtraInput(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-white font-mono"
               />
             </div>
           </div>
 
-          {/* RESUMEN PAGO AL REPARTIDOR */}
-          {totalForDriver > 0 && (
-            <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 flex justify-between items-center text-xs">
-              <span className="text-slate-400">Total a entregar al Cadete:</span>
-              <span className="font-mono font-bold text-amber-400">
-                {formatCurrency(totalForDriver)}
-              </span>
-            </div>
-          )}
-
-          <div className="bg-slate-950/90 p-4 rounded-2xl border border-slate-800 flex justify-between items-center">
-            <span className="text-xs text-slate-400 font-semibold uppercase">Total a Cobrar:</span>
-            <span className="font-mono font-bold text-2xl text-fuchsia-400">
-              {formatCurrency(finalTotal)}
+          {/* TOTAL Y BOTÓN DE CONFIRMAR */}
+          <div className="pt-2 flex items-center justify-between">
+            <span className="text-xs text-slate-400 uppercase font-bold">Total a Cobrar:</span>
+            <span className="font-mono text-2xl font-bold text-fuchsia-400">
+              {formatCurrency(cartTotal)}
             </span>
           </div>
 
           <button
-            disabled={saleCart.length === 0}
-            onClick={handleConfirmSale}
-            className={`w-full font-bold py-3.5 rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2 ${
-              paymentMethod === 'Fiado'
-                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-500/20'
-                : 'bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 shadow-fuchsia-500/20'
-            } disabled:bg-slate-800 disabled:text-slate-600`}
+            disabled={cart.length === 0}
+            onClick={handleSubmitSale}
+            className="w-full bg-fuchsia-500 hover:bg-fuchsia-400 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-bold py-3.5 rounded-2xl transition shadow-lg shadow-fuchsia-500/20 flex items-center justify-center gap-2"
           >
-            <Check className="w-5 h-5 stroke-[3]" /> Registrar Venta ({saleCart.length} ítems)
+            <Sparkles className="w-5 h-5" /> Registrar y Generar Ticket
           </button>
-
-          <div ref={cartEndRef} />
         </div>
       </div>
+
+      {/* MODAL POPUP PARA ENVIAR TICKET (WHATSAPP / INSTAGRAM) */}
+      {ticketModalData && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-base text-white flex items-center gap-2">
+                  <Send className="w-5 h-5 text-fuchsia-400" /> ¡Venta Registrada!
+                </h3>
+                <p className="text-[11px] text-slate-400">¿Querés enviar el ticket de compra al cliente?</p>
+              </div>
+              <button
+                onClick={() => setTicketModalData(null)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* VISTA PREVIA DEL TICKET */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-fuchsia-500/30 text-xs text-slate-200 font-mono whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
+              {ticketModalData.text}
+            </div>
+
+            {/* BOTONES DE ACCIÓN */}
+            <div className="space-y-2.5">
+              <button
+                onClick={handleSendWhatsApp}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3.5 rounded-2xl transition shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 text-xs"
+              >
+                <Send className="w-4 h-4 stroke-[2.5]" /> Enviar por WhatsApp
+              </button>
+
+              <button
+                onClick={handleCopyTicket}
+                className="w-full bg-slate-800 hover:bg-slate-700 text-fuchsia-300 border border-fuchsia-500/30 font-bold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-xs"
+              >
+                {isCopied ? <Check className="w-4 h-4 text-emerald-400 stroke-[3]" /> : <Copy className="w-4 h-4" />}
+                {isCopied ? '¡Ticket Copiado!' : 'Copiar Ticket (Para Instagram / Chat)'}
+              </button>
+
+              <button
+                onClick={() => setTicketModalData(null)}
+                className="w-full bg-transparent text-slate-500 hover:text-slate-300 font-medium py-2 text-xs transition"
+              >
+                Omitir y cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
