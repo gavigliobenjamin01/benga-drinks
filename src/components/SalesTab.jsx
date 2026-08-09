@@ -126,7 +126,6 @@ export default function SalesTab({
     let itemsFormatted = saleData.items
       .map((i) => {
         let line = `• ${i.qty}x ${i.name}`;
-        // Si es promo, agregamos el desglose de lo que trae
         if (i.raw?.description) {
           line += `\n   └─ Incluye: ${i.raw.description}`;
         }
@@ -161,6 +160,12 @@ export default function SalesTab({
   const handleSubmitSale = () => {
     if (cart.length === 0) return;
 
+    // VALIDACIÓN: Si intenta fiar a Cliente Casual, frena la función y NO abre el ticket
+    if (paymentMethod === 'Fiado' && selectedClient === 'Cliente Casual') {
+      notify('⚠️ Para fiar, seleccioná un cliente específico de la lista');
+      return;
+    }
+
     const salePayload = {
       saleCart: cart,
       selectedClient,
@@ -181,7 +186,7 @@ export default function SalesTab({
     // Ejecutamos el registro en Firebase
     onRegisterSale(salePayload);
 
-    // Armamos los datos del ticket para abrir el modal
+    // Armamos los datos del ticket para abrir el modal SOLO SI PASÓ LA VALIDACIÓN
     const preparedSale = {
       client: selectedClient,
       paymentMethod,
@@ -219,7 +224,6 @@ export default function SalesTab({
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
       {/* LADO IZQUIERDO: CATÁLOGO Y BUSCADOR */}
       <div className="lg:col-span-7 space-y-4">
-        {/* BUSCADOR Y FILTROS DE CATEGORÍAS */}
         <div className="space-y-3">
           <div className="relative">
             <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
@@ -249,7 +253,6 @@ export default function SalesTab({
           </div>
         </div>
 
-        {/* GRILLA DE PRODUCTOS Y PROMOS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
           {filteredCatalog.map((item) => (
             <div
@@ -299,7 +302,6 @@ export default function SalesTab({
           )}
         </div>
 
-        {/* LISTADO DEL CARRITO */}
         <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
           {cart.length === 0 ? (
             <p className="text-xs text-slate-500 text-center py-8">
@@ -338,7 +340,6 @@ export default function SalesTab({
           )}
         </div>
 
-        {/* DATOS DEL CLIENTE Y ENVÍO */}
         <div className="space-y-3 pt-3 border-t border-slate-800 text-xs">
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -411,7 +412,6 @@ export default function SalesTab({
             </div>
           </div>
 
-          {/* TOTAL Y BOTÓN DE CONFIRMAR */}
           <div className="pt-2 flex items-center justify-between">
             <span className="text-xs text-slate-400 uppercase font-bold">Total a Cobrar:</span>
             <span className="font-mono text-2xl font-bold text-fuchsia-400">
@@ -429,7 +429,7 @@ export default function SalesTab({
         </div>
       </div>
 
-      {/* MODAL POPUP PARA ENVIAR TICKET (WHATSAPP / INSTAGRAM) */}
+      {/* MODAL POPUP PARA ENVIAR TICKET */}
       {ticketModalData && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -448,12 +448,10 @@ export default function SalesTab({
               </button>
             </div>
 
-            {/* VISTA PREVIA DEL TICKET */}
             <div className="bg-slate-950 p-4 rounded-2xl border border-fuchsia-500/30 text-xs text-slate-200 font-mono whitespace-pre-wrap leading-relaxed max-h-56 overflow-y-auto">
               {ticketModalData.text}
             </div>
 
-            {/* BOTONES DE ACCIÓN */}
             <div className="space-y-2.5">
               <button
                 onClick={handleSendWhatsApp}
