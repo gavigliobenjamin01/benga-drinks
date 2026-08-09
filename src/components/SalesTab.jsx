@@ -1,17 +1,18 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
+import { toPng } from 'html-to-image';
 import {
   Search,
   Plus,
   Trash2,
-  Send,
-  Copy,
-  Check,
+  Download,
+  Share2,
   X,
   Sparkles,
   ShoppingBag,
   MapPin,
   UserCheck,
-  DollarSign
+  DollarSign,
+  Receipt
 } from 'lucide-react';
 import { formatCurrency } from '../utils';
 
@@ -31,9 +32,10 @@ export default function SalesTab({
   const [shippingFeeInput, setShippingFeeInput] = useState('');
   const [driverExtraInput, setDriverExtraInput] = useState('');
 
-  // ESTADO PARA MODAL DE ENVIAR TICKET LUEGO DE VENDER
+  // ESTADOS Y REFERENCIAS PARA EL TICKET VISUAL EN FOTO
   const [ticketModalData, setTicketModalData] = useState(null);
-  const [isCopied, setIsCopied] = useState(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const ticketRef = useRef(null);
 
   // OBTENER CATEGORÍAS
   const categories = useMemo(() => {
@@ -112,51 +114,14 @@ export default function SalesTab({
     );
   };
 
-  // CÁLCULOS DE CARRITO
+  // CÁLCULOS
   const shippingFee = parseFloat(shippingFeeInput) || 0;
   const driverExtra = parseFloat(driverExtraInput) || 0;
   const itemsTotal = cart.reduce((acc, i) => acc + i.price * i.qty, 0);
   const cartCostTotal = cart.reduce((acc, i) => acc + i.cost * i.qty, 0);
   const cartTotal = itemsTotal + shippingFee;
 
-  // ARMAR TICKET FACHERO 100% COMPATIBLE CON WHATSAPP
-  const buildTicketText = (saleData) => {
-    const clientObj = clients.find((c) => c.name === saleData.client);
-
-    let itemsFormatted = saleData.items
-      .map((i) => {
-        let line = `${i.qty}x ${i.name} ($${(i.price * i.qty).toLocaleString('es-AR')})`;
-        if (i.raw?.description) {
-          line += `\n   > Incluye: ${i.raw.description}`;
-        }
-        return line;
-      })
-      .join('\n');
-
-    let text = `🍹 *BENGA DRINKS* 🍹\n`;
-    text += `🧾 *COMPROBANTE DE COMPRA*\n\n`;
-    text += `\`\`\`\n`;
-    text += `👤 Cliente: ${saleData.client}\n`;
-    text += `💳 Pago: ${saleData.paymentMethod}\n`;
-    if (saleData.address) {
-      text += `📍 Dirección: ${saleData.address}\n`;
-    }
-    text += `--------------------------------\n`;
-    text += `${itemsFormatted}\n`;
-    if (saleData.shippingFee > 0) {
-      text += `--------------------------------\n`;
-      text += `🛵 Envío: $${saleData.shippingFee.toLocaleString('es-AR')}\n`;
-    }
-    text += `--------------------------------\n`;
-    text += `💰 TOTAL: $${saleData.total.toLocaleString('es-AR')}\n`;
-    text += `--------------------------------\n`;
-    text += `\`\`\`\n`;
-    text += `✨ ¡Muchas gracias por tu compra! 🙌`;
-
-    return { text, phone: clientObj?.phone || '' };
-  };
-
-  // REGISTRAR VENTA
+  // REGISTRAR LA VENTA
   const handleSubmitSale = () => {
     if (cart.length === 0) return;
 
@@ -184,37 +149,70 @@ export default function SalesTab({
 
     onRegisterSale(salePayload);
 
-    const preparedSale = {
+    // DATOS PARA GENERAR LA FOTO DEL TICKET
+    setTicketModalData({
+      ticketId: `V-${Date.now().toString().slice(-4)}`,
+      date: new Date().toLocaleDateString('es-AR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
       client: selectedClient,
       paymentMethod,
       address,
-      items: cart,
+      items: [...cart],
       shippingFee,
       total: cartTotal
-    };
-
-    const { text, phone } = buildTicketText(preparedSale);
-    setTicketModalData({ text, phone });
+    });
   };
 
-  const handleCopyTicket = () => {
-    if (!ticketModalData) return;
-    navigator.clipboard.writeText(ticketModalData.text);
-    setIsCopied(true);
-    notify('📋 Ticket copiado al portapapeles');
-    setTimeout(() => setIsCopied(false), 2500);
+  // DESCARGAR TICKET COMO FOTO PNG
+  const handleDownloadImage = async () => {
+    if (!ticketRef.current) return;
+    setIsGeneratingImage(true);
+
+    try {
+      const dataUrl = await toPng(ticketRef.current, { cacheBust: true, pixelRatio: 2 });
+      const link = document.createElement('a');
+      link.download = `Ticket-BengaDrinks-${ticketModalData.ticketId}.png`;
+      link.href = dataUrl;
+      link.click();
+      notify('📸 Imagen del ticket descargada');
+    } catch (err) {
+      notify('⚠️ No se pudo generar la imagen');
+    } finally {
+      setIsGeneratingImage(false);
+    }
   };
 
-  const handleSendWhatsApp = () => {
-    if (!ticketModalData) return;
-    const cleanPhone = ticketModalData.phone.replace(/[^0-9]/g, '');
-    const encodedText = encodeURIComponent(ticketModalData.text);
+  // COMPARTIR FOTO DIRECTA (EN CELULARES / TABLETS)
+  const handleShareImage = async () => {
+    if (!ticketRef.current) return;
+    setIsGeneratingImage(true);
 
-    let url = cleanPhone
-      ? `[https://wa.me/$](https://wa.me/$){cleanPhone}?text=${encodedText}`
-      : `[https://wa.me/?text=$](https://wa.me/?text=$){encodedText}`;
+    try {
+      const dataUrl = await toPng(ticketRef.current, { cacheBust: true, pixelRatio: 2 });
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], `Ticket-BengaDrinks-${ticketModalData.ticketId}.png`, {
+        type: 'image/png'
+      });
 
-    window.open(url, '_blank');
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Ticket de Compra - Benga Drinks',
+          text: `¡Hola ${ticketModalData.client}! Acá tenés el comprobante de tu pedido. 🍹`
+        });
+      } else {
+        handleDownloadImage();
+      }
+    } catch (err) {
+      handleDownloadImage();
+    } finally {
+      setIsGeneratingImage(false);
+    }
   };
 
   return (
@@ -223,7 +221,7 @@ export default function SalesTab({
       <div className="lg:col-span-7 space-y-4">
         <div className="space-y-3">
           <div className="relative">
-            <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400"/>
+            <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
             <input
               type="text"
               placeholder="Buscar fernet, vodka, hielo, combos..."
@@ -279,7 +277,7 @@ export default function SalesTab({
               </div>
 
               <div className="w-8 h-8 rounded-xl bg-slate-800 group-hover:bg-fuchsia-500 group-hover:text-slate-950 text-slate-300 flex items-center justify-center transition shadow">
-                <Plus className="w-4 h-4 stroke-[3]"/>
+                <Plus className="w-4 h-4 stroke-[3]" />
               </div>
             </div>
           ))}
@@ -290,7 +288,7 @@ export default function SalesTab({
       <div className="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl">
         <div className="flex justify-between items-center pb-3 border-b border-slate-800">
           <h2 className="font-bold text-base text-white flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5 text-fuchsia-400"/> Venta Actual
+            <ShoppingBag className="w-5 h-5 text-fuchsia-400" /> Venta Actual
           </h2>
           {cart.length > 0 && (
             <button onClick={() => setCart([])} className="text-xs text-red-400 hover:underline">
@@ -341,7 +339,7 @@ export default function SalesTab({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="text-slate-400 block mb-1 font-medium flex items-center gap-1">
-                <UserCheck className="w-3.5 h-3.5 text-fuchsia-400"/> Cliente:
+                <UserCheck className="w-3.5 h-3.5 text-fuchsia-400" /> Cliente:
               </label>
               <select
                 value={selectedClient}
@@ -359,7 +357,7 @@ export default function SalesTab({
 
             <div>
               <label className="text-slate-400 block mb-1 font-medium flex items-center gap-1">
-                <DollarSign className="w-3.5 h-3.5 text-emerald-400"/> Medio de Pago:
+                <DollarSign className="w-3.5 h-3.5 text-emerald-400" /> Medio de Pago:
               </label>
               <select
                 value={paymentMethod}
@@ -375,7 +373,7 @@ export default function SalesTab({
 
           <div>
             <label className="text-slate-400 block mb-1 font-medium flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5 text-fuchsia-400"/> Dirección de Envío (Opcional):
+              <MapPin className="w-3.5 h-3.5 text-fuchsia-400" /> Dirección de Envío (Opcional):
             </label>
             <input
               type="text"
@@ -421,55 +419,108 @@ export default function SalesTab({
             onClick={handleSubmitSale}
             className="w-full bg-fuchsia-500 hover:bg-fuchsia-400 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-bold py-3.5 rounded-2xl transition shadow-lg shadow-fuchsia-500/20 flex items-center justify-center gap-2"
           >
-            <Sparkles className="w-5 h-5"/> Registrar y Generar Ticket
+            <Sparkles className="w-5 h-5" /> Registrar y Generar Ticket
           </button>
         </div>
       </div>
 
-      {/* MODAL ENVIAR TICKET */}
+      {/* MODAL CON EL TICKET VISUAL EN FOTO */}
       {ticketModalData && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <div>
-                <h3 className="font-bold text-base text-white flex items-center gap-2">
-                  <Send className="w-5 h-5 text-fuchsia-400"/> ¡Venta Registrada!
-                </h3>
-                <p className="text-[11px] text-slate-400">¿Querés enviar el ticket de compra al cliente?</p>
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+              <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-fuchsia-400" /> Ticket Digital Generado
+              </h3>
+              <button onClick={() => setTicketModalData(null)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* VISTA PREVIA DEL TICKET (LO QUE SE TRANSFORMA EN IMAGEN) */}
+            <div className="overflow-hidden rounded-2xl shadow-2xl">
+              <div
+                ref={ticketRef}
+                className="bg-slate-950 text-slate-100 p-5 font-mono text-xs space-y-4 border border-fuchsia-500/30"
+              >
+                {/* ENCABEZADO TICKET */}
+                <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-800">
+                  <div className="font-black text-base tracking-wider text-fuchsia-400">BENGA DRINKS</div>
+                  <div className="text-[10px] text-slate-400 uppercase">Gestión de Bebidas & Eventos</div>
+                  <div className="text-[9px] text-slate-500 pt-1">Ticket #{ticketModalData.ticketId} • {ticketModalData.date}</div>
+                </div>
+
+                {/* DATOS DE LA COMPRA */}
+                <div className="space-y-1 text-[11px] pb-3 border-b border-dashed border-slate-800">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Cliente:</span>
+                    <strong className="text-white">{ticketModalData.client}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Pago:</span>
+                    <strong className="text-emerald-400">{ticketModalData.paymentMethod}</strong>
+                  </div>
+                  {ticketModalData.address && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Envío a:</span>
+                      <strong className="text-slate-200 truncate max-w-[150px]">{ticketModalData.address}</strong>
+                    </div>
+                  )}
+                </div>
+
+                {/* PRODUCTOS */}
+                <div className="space-y-2 pb-3 border-b border-dashed border-slate-800">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Detalle:</span>
+                  {ticketModalData.items.map((item, idx) => (
+                    <div key={idx} className="space-y-0.5">
+                      <div className="flex justify-between">
+                        <span>{item.qty}x {item.name}</span>
+                        <span className="font-bold">{formatCurrency(item.price * item.qty)}</span>
+                      </div>
+                      {item.raw?.description && (
+                        <div className="text-[9px] text-fuchsia-300 pl-2">
+                          + {item.raw.description}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {ticketModalData.shippingFee > 0 && (
+                    <div className="flex justify-between text-slate-400 pt-1">
+                      <span>Costo de Envío</span>
+                      <span>{formatCurrency(ticketModalData.shippingFee)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* TOTAL */}
+                <div className="pt-1 flex justify-between items-center text-sm font-bold">
+                  <span className="text-slate-300">TOTAL:</span>
+                  <span className="text-fuchsia-400 text-base">{formatCurrency(ticketModalData.total)}</span>
+                </div>
+
+                <div className="text-center text-[9px] text-slate-500 pt-2 border-t border-dashed border-slate-800">
+                  ¡Muchas gracias por tu preferencia! ✨
+                </div>
               </div>
-              <button
-                onClick={() => setTicketModalData(null)}
-                className="text-slate-400 hover:text-white p-1"
-              >
-                <X className="w-5 h-5"/>
-              </button>
             </div>
 
-            <div className="bg-slate-950 p-4 rounded-2xl border border-fuchsia-500/30 text-xs text-slate-200 font-mono whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto">
-              {ticketModalData.text}
-            </div>
-
-            <div className="space-y-2.5">
+            {/* BOTONES DE DESCARGA Y COMPARTIR */}
+            <div className="space-y-2 pt-1">
               <button
-                onClick={handleSendWhatsApp}
-                className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold py-3.5 rounded-2xl transition shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 text-xs"
+                disabled={isGeneratingImage}
+                onClick={handleShareImage}
+                className="w-full bg-fuchsia-500 hover:bg-fuchsia-400 disabled:bg-slate-800 text-slate-950 font-bold py-3 rounded-2xl transition shadow-lg shadow-fuchsia-500/20 flex items-center justify-center gap-2 text-xs"
               >
-                <Send className="w-4 h-4 stroke-[2.5]"/> Enviar por WhatsApp
+                <Share2 className="w-4 h-4" /> Compartir Foto / Enviar
               </button>
 
               <button
-                onClick={handleCopyTicket}
-                className="w-full bg-slate-800 hover:bg-slate-700 text-fuchsia-300 border border-fuchsia-500/30 font-bold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-xs"
+                disabled={isGeneratingImage}
+                onClick={handleDownloadImage}
+                className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold py-3 rounded-2xl transition flex items-center justify-center gap-2 text-xs"
               >
-                {isCopied ? <Check className="w-4 h-4 text-emerald-400 stroke-[3]"/> : <Copy className="w-4 h-4"/>}
-                {isCopied ? '¡Ticket Copiado!' : 'Copiar Ticket (Para Instagram / Chat)'}
-              </button>
-
-              <button
-                onClick={() => setTicketModalData(null)}
-                className="w-full bg-transparent text-slate-500 hover:text-slate-300 font-medium py-2 text-xs transition"
-              >
-                Omitir y cerrar
+                <Download className="w-4 h-4" /> Descargar Imagen PNG
               </button>
             </div>
           </div>
