@@ -446,7 +446,7 @@ export default function SalesTab({
                 {/* ENCABEZADO TICKET */}
                 <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-800">
                   <div className="font-black text-base tracking-wider text-fuchsia-400">BENGA DRINKS</div>
-                  <div className="text-[10px] text-slate-400 uppercase">Gestión de Bebidas & Eventos</div>
+                  <div className="text-[10px] text-slate-400 uppercase">Venta de Bebidas</div>
                   <div className="text-[9px] text-slate-500 pt-1">Ticket #{ticketModalData.ticketId} • {ticketModalData.date}</div>
                 </div>
 
