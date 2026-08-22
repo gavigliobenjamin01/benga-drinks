@@ -34,7 +34,8 @@ import {
   ShieldCheck,
   TrendingUp,
   PieChart,
-  Sparkles
+  Sparkles,
+  Calculator
 } from 'lucide-react';
 
 export default function App() {
@@ -53,11 +54,19 @@ export default function App() {
   const [withdrawInput, setWithdrawInput] = useState('');
   const [withdrawNote, setWithdrawNote] = useState('');
 
-  // ESTADOS DE INGRESO DE MERCADERÍA CON DESGLOSE DE PAGO
+  // ESTADOS DE INGRESO DE MERCADERÍA
   const [entryCart, setEntryCart] = useState([]);
   const [entrySearchTerm, setEntrySearchTerm] = useState('');
   const [entryEfectivoInput, setEntryEfectivoInput] = useState('');
   const [entryTransferenciaInput, setEntryTransferenciaInput] = useState('');
+
+  // ESTADOS PARA PRECIOS Y MÁRGENES DE PRODUCTOS (MODALES)
+  const [prodCostInput, setProdCostInput] = useState('');
+  const [prodSellInput, setProdSellInput] = useState('');
+  const [prodComboInput, setProdComboInput] = useState('');
+
+  // ESTADOS PARA PROMOS Y SU GANANCIA
+  const [promoPriceInput, setPromoPriceInput] = useState('');
 
   // ESTADOS PARA MODALES Y FILTROS DE INVENTARIO
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('Todas');
@@ -137,14 +146,13 @@ export default function App() {
     await setDoc(doc(db, 'settings', 'config'), { salaryPercentage: newVal }, { merge: true });
   };
 
-  // --- CÁLCULO DE MÉTRICAS GLOBALES CON PAGO MIXTO/DIVIDIDO DE MERCADERÍA ---
+  // --- CÁLCULO DE MÉTRICAS GLOBALES ---
   const metrics = useMemo(() => {
     const paidSales = sales.filter((s) => s.paymentMethod !== 'Fiado');
 
     const rawRevenue = paidSales.reduce((acc, s) => acc + s.total, 0);
     const totalSalesCost = paidSales.reduce((acc, s) => acc + s.cost, 0);
 
-    // Gastos de mercadería divididos exactamente según monto en Efectivo y Mercado Pago
     const merchandiseExpensesEfectivo = stockEntries.reduce((acc, e) => {
       if (e.paidEfectivo !== undefined) return acc + (e.paidEfectivo || 0);
       return (e.paymentMethod || 'Efectivo') === 'Efectivo' ? acc + (e.totalCost || 0) : acc;
@@ -157,7 +165,6 @@ export default function App() {
 
     const merchandiseExpenses = merchandiseExpensesEfectivo + merchandiseExpensesTransferencia;
 
-    // Ventas brutas cobradas
     const rawEfectivoRevenue = paidSales
       .filter((s) => s.paymentMethod === 'Efectivo')
       .reduce((acc, s) => acc + s.total, 0);
@@ -166,7 +173,6 @@ export default function App() {
       .filter((s) => s.paymentMethod === 'Transferencia')
       .reduce((acc, s) => acc + s.total, 0);
 
-    // Saldo real en cada caja restando los gastos de stock correspondientes
     const efectivoRevenue = rawEfectivoRevenue - merchandiseExpensesEfectivo;
     const transferenciaRevenue = rawTransferenciaRevenue - merchandiseExpensesTransferencia;
 
@@ -217,7 +223,15 @@ export default function App() {
     );
   }, [products, inventoryCategoryFilter]);
 
-  // --- REGISTRO DE VENTAS Y ACCIONES DE INVENTARIO ---
+  // --- BOTONES DE MARGEN RÁPIDO (+30%, +50%, +80%, +100%) ---
+  const applySuggestedMargin = (multiplier) => {
+    const cost = parseFloat(prodCostInput) || 0;
+    if (cost <= 0) return;
+    const suggestedPrice = Math.round(cost * multiplier);
+    setProdSellInput(suggestedPrice.toString());
+  };
+
+  // --- REGISTRO DE VENTAS Y ACCIONES ---
   const handleRegisterSale = async ({
     saleCart,
     selectedClient,
@@ -301,7 +315,7 @@ export default function App() {
     const saleToPay = sales.find((s) => s.id === saleId);
     if (!saleToPay || saleToPay.paymentMethod !== 'Fiado') return;
 
-    await updateDoc(doc(db, 'sales', saleId), { paymentMethod: newPaymentMethod });
+    await updateDoc(doc(db, 'sales', saleId));
 
     const clientObj = clients.find((c) => c.name === saleToPay.client);
     if (clientObj) {
@@ -381,6 +395,20 @@ export default function App() {
     notify(`🗑️ ${prod ? prod.name : 'Producto'} eliminado`);
   };
 
+  const openCreateProductModal = () => {
+    setProdCostInput('');
+    setProdSellInput('');
+    setProdComboInput('');
+    setShowProductModal(true);
+  };
+
+  const openEditProductModal = (prod) => {
+    setEditingProduct(prod);
+    setProdCostInput(prod.costPrice?.toString() || '');
+    setProdSellInput(prod.sellPrice?.toString() || '');
+    setProdComboInput(prod.comboPrice?.toString() || '');
+  };
+
   const handleAddProduct = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -389,9 +417,9 @@ export default function App() {
       name: fd.get('name'),
       brand: fd.get('brand'),
       category: fd.get('category'),
-      costPrice: parseFloat(fd.get('costPrice')),
-      sellPrice: parseFloat(fd.get('sellPrice')),
-      comboPrice: parseFloat(fd.get('comboPrice')) || 0,
+      costPrice: parseFloat(prodCostInput) || 0,
+      sellPrice: parseFloat(prodSellInput) || 0,
+      comboPrice: parseFloat(prodComboInput) || 0,
       stock: parseInt(fd.get('stock'), 10),
       minStock: parseInt(fd.get('minStock'), 10),
     };
@@ -404,17 +432,14 @@ export default function App() {
   const handleUpdateProduct = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const newCost = parseFloat(fd.get('costPrice'));
-    const newSell = parseFloat(fd.get('sellPrice'));
-    const newCombo = parseFloat(fd.get('comboPrice'));
 
     const updatedData = {
       name: fd.get('name'),
       brand: fd.get('brand'),
       category: fd.get('category'),
-      costPrice: isNaN(newCost) ? editingProduct.costPrice : newCost,
-      sellPrice: isNaN(newSell) ? editingProduct.sellPrice : newSell,
-      comboPrice: isNaN(newCombo) ? (editingProduct.comboPrice || 0) : newCombo,
+      costPrice: parseFloat(prodCostInput) || editingProduct.costPrice,
+      sellPrice: parseFloat(prodSellInput) || editingProduct.sellPrice,
+      comboPrice: parseFloat(prodComboInput) || (editingProduct.comboPrice || 0),
       minStock: parseInt(fd.get('minStock'), 10) || editingProduct.minStock
     };
 
@@ -463,6 +488,7 @@ export default function App() {
   const openCreatePromoModal = () => {
     setPromoItems([]);
     setPromoDescription('');
+    setPromoPriceInput('');
     setSelectedProdForPromo('');
     setShowPromoModal(true);
   };
@@ -471,6 +497,7 @@ export default function App() {
     setEditingPromo(promo);
     const initialItems = promo.items || [];
     setPromoItems(initialItems);
+    setPromoPriceInput(promo.price?.toString() || '');
     setPromoDescription(promo.description || formatPromoDescription(initialItems, products));
     setSelectedProdForPromo('');
   };
@@ -482,7 +509,7 @@ export default function App() {
       id: `pr-${Date.now()}`,
       name: fd.get('name'),
       type: fd.get('type'),
-      price: parseFloat(fd.get('price')),
+      price: parseFloat(promoPriceInput) || 0,
       active: true,
       description: promoDescription || fd.get('description') || '',
       items: promoItems
@@ -503,12 +530,11 @@ export default function App() {
   const handleUpdatePromo = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const newPrice = parseFloat(fd.get('price'));
 
     const updatedData = {
       name: fd.get('name'),
       type: fd.get('type'),
-      price: isNaN(newPrice) ? editingPromo.price : newPrice,
+      price: parseFloat(promoPriceInput) || editingPromo.price,
       description: promoDescription || fd.get('description') || '',
       items: promoItems
     };
@@ -552,7 +578,6 @@ export default function App() {
     );
   };
 
-  // --- REGISTRO DE MERCADERÍA CON SOPORTE PARA PAGO DIVIDIDO ---
   const handleRegisterStockEntry = async () => {
     if (entryCart.length === 0) return;
 
@@ -639,6 +664,19 @@ export default function App() {
     notify('🗑️ Retiro devuelto al saldo disponible');
   };
 
+  // CÁLCULOS DINÁMICOS DE MÁRGENES Y GANANCIAS EN MODALES
+  const prodCostNum = parseFloat(prodCostInput) || 0;
+  const prodSellNum = parseFloat(prodSellInput) || 0;
+  const prodProfit = prodSellNum - prodCostNum;
+  const prodMarginPct = prodCostNum > 0 ? Math.round((prodProfit / prodCostNum) * 100) : 0;
+
+  const currentPromoCost = promoItems.reduce((acc, item) => {
+    const p = products.find((prod) => prod.id === item.productId);
+    return acc + (p ? p.costPrice * item.quantity : 0);
+  }, 0);
+  const currentPromoPrice = parseFloat(promoPriceInput) || 0;
+  const currentPromoProfit = currentPromoPrice - currentPromoCost;
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row antialiased">
       {/* NOTIFICACIÓN TOAST */}
@@ -685,9 +723,9 @@ export default function App() {
             sortedAndFilteredInventory={sortedAndFilteredInventory}
             metrics={metrics}
             setShowWithdrawModal={setShowWithdrawModal}
-            setShowProductModal={setShowProductModal}
+            setShowProductModal={openCreateProductModal}
             handleAdjustStock={handleAdjustStock}
-            setEditingProduct={setEditingProduct}
+            setEditingProduct={openEditProductModal}
             handleDeleteProduct={handleDeleteProduct}
           />
         )}
@@ -695,6 +733,7 @@ export default function App() {
         {activeTab === 'promos' && (
           <PromosTab
             promos={promos}
+            products={products}
             openCreatePromoModal={openCreatePromoModal}
             openEditPromoModal={openEditPromoModal}
             handleDeletePromo={handleDeletePromo}
@@ -984,7 +1023,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL NUEVO PRODUCTO */}
+      {/* MODAL NUEVO PRODUCTO CON CALCULADORA DE PRECIO/MARGEN */}
       {showProductModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl">
@@ -1007,22 +1046,101 @@ export default function App() {
                   <input required name="category" placeholder="Ej: Hielo / Hielos / Agregados" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="text-slate-400 block mb-1">Precio Costo ($):</label>
-                  <input required type="number" step="any" name="costPrice" placeholder="1000" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono" />
+
+              {/* CAMPOS DE PRECIOS Y CALCULADORA DE MARGEN */}
+              <div className="space-y-2.5 bg-slate-950/70 p-3 rounded-2xl border border-slate-800">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-slate-400 block mb-1 font-medium">Precio Costo ($):</label>
+                    <input
+                      required
+                      type="number"
+                      step="any"
+                      placeholder="1000"
+                      value={prodCostInput}
+                      onChange={(e) => setProdCostInput(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-slate-400 block mb-1 font-medium">Precio Venta ($):</label>
+                    <input
+                      required
+                      type="number"
+                      step="any"
+                      placeholder="2500"
+                      value={prodSellInput}
+                      onChange={(e) => setProdSellInput(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="text-slate-400 block mb-1">Precio Venta ($):</label>
-                  <input required type="number" step="any" name="sellPrice" placeholder="2500" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono" />
-                </div>
+
+                {/* BOTONES DE MARGEN RÁPIDO */}
+                {prodCostNum > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] text-slate-400 font-semibold uppercase flex items-center gap-1">
+                      <Calculator className="w-3 h-3 text-fuchsia-400" /> Precios Sugeridos por Margen:
+                    </span>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => applySuggestedMargin(1.3)}
+                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
+                      >
+                        +30%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applySuggestedMargin(1.5)}
+                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
+                      >
+                        +50%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applySuggestedMargin(1.8)}
+                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
+                      >
+                        +80%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applySuggestedMargin(2.0)}
+                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
+                      >
+                        +100%
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* INDICADOR DE GANANCIA Y MARGEN OBTENIDO */}
+                {prodCostNum > 0 && prodSellNum > 0 && (
+                  <div className="bg-slate-900 p-2 rounded-xl border border-emerald-500/20 flex justify-between items-center text-[11px]">
+                    <span className="text-emerald-400 font-bold">Ganancia por unidad:</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {formatCurrency(prodProfit)} ({prodMarginPct}% margen)
+                    </span>
+                  </div>
+                )}
+
                 <div>
                   <label className="text-amber-400 font-bold block mb-1 flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> Precio Combo ($):
+                    <Sparkles className="w-3 h-3" /> Precio Combo ($ - Opcional):
                   </label>
-                  <input type="number" step="any" name="comboPrice" placeholder="2000" className="w-full bg-slate-950 border border-amber-500/40 rounded-xl p-2.5 text-amber-400 font-mono font-bold" />
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="2000"
+                    value={prodComboInput}
+                    onChange={(e) => setProdComboInput(e.target.value)}
+                    className="w-full bg-slate-950 border border-amber-500/40 rounded-xl p-2.5 text-amber-400 font-mono font-bold"
+                  />
                 </div>
               </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-slate-400 block mb-1">Stock Inicial:</label>
@@ -1033,7 +1151,10 @@ export default function App() {
                   <input required type="number" name="minStock" placeholder="5" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono" />
                 </div>
               </div>
-              <button type="submit" className="w-full bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 font-bold py-3 rounded-xl transition mt-2">Guardar Producto</button>
+
+              <button type="submit" className="w-full bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 font-bold py-3 rounded-xl transition mt-2">
+                Guardar Producto
+              </button>
             </form>
           </div>
         </div>
@@ -1064,22 +1185,98 @@ export default function App() {
                   <input required name="category" defaultValue={editingProduct.category} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="text-fuchsia-400 font-bold block mb-1">P. Costo ($):</label>
-                  <input required type="number" step="any" name="costPrice" defaultValue={editingProduct.costPrice} className="w-full bg-slate-950 border border-fuchsia-500/50 rounded-xl p-2.5 text-white font-mono" />
+
+              {/* CAMPOS DE PRECIOS CON MARGEN Y GANANCIA */}
+              <div className="space-y-2.5 bg-slate-950/70 p-3 rounded-2xl border border-slate-800">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-fuchsia-400 font-bold block mb-1">P. Costo ($):</label>
+                    <input
+                      required
+                      type="number"
+                      step="any"
+                      value={prodCostInput}
+                      onChange={(e) => setProdCostInput(e.target.value)}
+                      className="w-full bg-slate-950 border border-fuchsia-500/50 rounded-xl p-2.5 text-white font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-fuchsia-400 font-bold block mb-1">P. Venta ($):</label>
+                    <input
+                      required
+                      type="number"
+                      step="any"
+                      value={prodSellInput}
+                      onChange={(e) => setProdSellInput(e.target.value)}
+                      className="w-full bg-slate-950 border border-fuchsia-500/50 rounded-xl p-2.5 text-white font-mono"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="text-fuchsia-400 font-bold block mb-1">P. Venta ($):</label>
-                  <input required type="number" step="any" name="sellPrice" defaultValue={editingProduct.sellPrice} className="w-full bg-slate-950 border border-fuchsia-500/50 rounded-xl p-2.5 text-white font-mono" />
-                </div>
+
+                {/* BOTONES DE MARGEN RÁPIDO */}
+                {prodCostNum > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] text-slate-400 font-semibold uppercase flex items-center gap-1">
+                      <Calculator className="w-3 h-3 text-fuchsia-400" /> Precios Sugeridos por Margen:
+                    </span>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => applySuggestedMargin(1.3)}
+                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
+                      >
+                        +30%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applySuggestedMargin(1.5)}
+                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
+                      >
+                        +50%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applySuggestedMargin(1.8)}
+                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
+                      >
+                        +80%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applySuggestedMargin(2.0)}
+                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
+                      >
+                        +100%
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* GANANCIA Y MARGEN */}
+                {prodCostNum > 0 && prodSellNum > 0 && (
+                  <div className="bg-slate-900 p-2 rounded-xl border border-emerald-500/20 flex justify-between items-center text-[11px]">
+                    <span className="text-emerald-400 font-bold">Ganancia por unidad:</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {formatCurrency(prodProfit)} ({prodMarginPct}% margen)
+                    </span>
+                  </div>
+                )}
+
                 <div>
                   <label className="text-amber-400 font-bold block mb-1 flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> P. Combo ($):
+                    <Sparkles className="w-3 h-3" /> P. Combo ($ - Opcional):
                   </label>
-                  <input type="number" step="any" name="comboPrice" defaultValue={editingProduct.comboPrice || ''} placeholder="Ej: 2000" className="w-full bg-slate-950 border border-amber-500/40 rounded-xl p-2.5 text-amber-400 font-mono font-bold" />
+                  <input
+                    type="number"
+                    step="any"
+                    value={prodComboInput}
+                    onChange={(e) => setProdComboInput(e.target.value)}
+                    placeholder="Ej: 2000"
+                    className="w-full bg-slate-950 border border-amber-500/40 rounded-xl p-2.5 text-amber-400 font-mono font-bold"
+                  />
                 </div>
               </div>
+
               <div>
                 <label className="text-slate-400 block mb-1">Stock Mínimo Alerta:</label>
                 <input required type="number" name="minStock" defaultValue={editingProduct.minStock} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono" />
@@ -1097,7 +1294,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL CREAR PROMO */}
+      {/* MODAL CREAR PROMO CON CÁLCULO DE GANANCIA */}
       {showPromoModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -1171,8 +1368,31 @@ export default function App() {
 
               <div>
                 <label className="text-slate-400 block mb-1">Precio Final ($):</label>
-                <input required type="number" step="any" name="price" placeholder="2700" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono" />
+                <input
+                  required
+                  type="number"
+                  step="any"
+                  placeholder="2700"
+                  value={promoPriceInput}
+                  onChange={(e) => setPromoPriceInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono"
+                />
               </div>
+
+              {/* DETALLE DE GANANCIA DE LA PROMO EN EL MODAL */}
+              {promoItems.length > 0 && (
+                <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-1 font-mono text-xs">
+                  <div className="flex justify-between text-slate-400">
+                    <span>Costo total productos:</span>
+                    <span>{formatCurrency(currentPromoCost)}</span>
+                  </div>
+                  <div className="flex justify-between text-emerald-400 font-bold text-sm pt-1 border-t border-slate-800">
+                    <span>💰 Ganancia Estimada:</span>
+                    <span>{formatCurrency(currentPromoProfit)}</span>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="text-slate-400 block mb-1">Descripción:</label>
                 <input
@@ -1190,7 +1410,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL EDITAR PROMO */}
+      {/* MODAL EDITAR PROMO CON CÁLCULO DE GANANCIA */}
       {editingPromo && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -1266,8 +1486,30 @@ export default function App() {
 
               <div>
                 <label className="text-fuchsia-400 font-bold block mb-1">Precio Final ($):</label>
-                <input required type="number" step="any" name="price" defaultValue={editingPromo.price} className="w-full bg-slate-950 border border-fuchsia-500/50 rounded-xl p-2.5 text-white font-mono" />
+                <input
+                  required
+                  type="number"
+                  step="any"
+                  value={promoPriceInput}
+                  onChange={(e) => setPromoPriceInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-fuchsia-500/50 rounded-xl p-2.5 text-white font-mono"
+                />
               </div>
+
+              {/* DETALLE DE GANANCIA DE LA PROMO EN EL MODAL */}
+              {promoItems.length > 0 && (
+                <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-1 font-mono text-xs">
+                  <div className="flex justify-between text-slate-400">
+                    <span>Costo total productos:</span>
+                    <span>{formatCurrency(currentPromoCost)}</span>
+                  </div>
+                  <div className="flex justify-between text-emerald-400 font-bold text-sm pt-1 border-t border-slate-800">
+                    <span>💰 Ganancia Estimada:</span>
+                    <span>{formatCurrency(currentPromoProfit)}</span>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="text-slate-400 block mb-1">Descripción:</label>
                 <input
