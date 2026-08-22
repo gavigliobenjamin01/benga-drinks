@@ -65,7 +65,7 @@ export default function App() {
   const [prodSellInput, setProdSellInput] = useState('');
   const [prodComboInput, setProdComboInput] = useState('');
 
-  // ESTADOS PARA PROMOS Y SU GANANCIA
+  // ESTADOS PARA PROMOS Y SU GANANCIA EN TIEMPO REAL
   const [promoPriceInput, setPromoPriceInput] = useState('');
 
   // ESTADOS PARA MODALES Y FILTROS DE INVENTARIO
@@ -315,7 +315,7 @@ export default function App() {
     const saleToPay = sales.find((s) => s.id === saleId);
     if (!saleToPay || saleToPay.paymentMethod !== 'Fiado') return;
 
-    await updateDoc(doc(db, 'sales', saleId));
+    await updateDoc(doc(db, 'sales', saleId), { paymentMethod: newPaymentMethod });
 
     const clientObj = clients.find((c) => c.name === saleToPay.client);
     if (clientObj) {
@@ -670,12 +670,16 @@ export default function App() {
   const prodProfit = prodSellNum - prodCostNum;
   const prodMarginPct = prodCostNum > 0 ? Math.round((prodProfit / prodCostNum) * 100) : 0;
 
-  const currentPromoCost = promoItems.reduce((acc, item) => {
-    const p = products.find((prod) => prod.id === item.productId);
-    return acc + (p ? p.costPrice * item.quantity : 0);
-  }, 0);
+  const currentPromoCost = useMemo(() => {
+    return promoItems.reduce((acc, item) => {
+      const p = products.find((prod) => prod.id === item.productId);
+      return acc + (p ? (p.costPrice || 0) * item.quantity : 0);
+    }, 0);
+  }, [promoItems, products]);
+
   const currentPromoPrice = parseFloat(promoPriceInput) || 0;
   const currentPromoProfit = currentPromoPrice - currentPromoCost;
+  const currentPromoMarginPct = currentPromoCost > 0 ? Math.round((currentPromoProfit / currentPromoCost) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row antialiased">
@@ -1294,7 +1298,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL CREAR PROMO CON CÁLCULO DE GANANCIA */}
+      {/* MODAL CREAR PROMO CON CÁLCULO DE GANANCIA VISIBLE */}
       {showPromoModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -1367,28 +1371,39 @@ export default function App() {
               </div>
 
               <div>
-                <label className="text-slate-400 block mb-1">Precio Final ($):</label>
+                <label className="text-slate-400 block mb-1 font-medium">Precio Final de Venta ($):</label>
                 <input
                   required
                   type="number"
                   step="any"
-                  placeholder="2700"
+                  placeholder="Ej: 5000"
                   value={promoPriceInput}
                   onChange={(e) => setPromoPriceInput(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono"
+                  className="w-full bg-slate-950 border border-fuchsia-500/50 rounded-xl p-2.5 text-white font-mono text-sm focus:outline-none focus:border-fuchsia-400"
                 />
               </div>
 
-              {/* DETALLE DE GANANCIA DE LA PROMO EN EL MODAL */}
+              {/* CUADRO DESTACADO DE COSTO Y GANANCIA DE LA PROMO */}
               {promoItems.length > 0 && (
-                <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-1 font-mono text-xs">
-                  <div className="flex justify-between text-slate-400">
-                    <span>Costo total productos:</span>
-                    <span>{formatCurrency(currentPromoCost)}</span>
+                <div className="bg-slate-950 p-3.5 rounded-2xl border border-emerald-500/30 space-y-2">
+                  <div className="flex justify-between items-center text-xs text-slate-400">
+                    <span>Costo total productos del combo:</span>
+                    <span className="font-mono text-white font-bold">{formatCurrency(currentPromoCost)}</span>
                   </div>
-                  <div className="flex justify-between text-emerald-400 font-bold text-sm pt-1 border-t border-slate-800">
-                    <span>💰 Ganancia Estimada:</span>
-                    <span>{formatCurrency(currentPromoProfit)}</span>
+                  <div className="flex justify-between items-center text-xs pt-2 border-t border-slate-800">
+                    <span className="text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                      <TrendingUp className="w-4 h-4" /> Ganancia Limpia:
+                    </span>
+                    <div className="text-right">
+                      <span className="font-mono font-bold text-emerald-400 text-base block">
+                        {formatCurrency(currentPromoProfit)}
+                      </span>
+                      {currentPromoCost > 0 && currentPromoPrice > 0 && (
+                        <span className="text-[10px] text-emerald-300/80 font-mono">
+                          ({currentPromoMarginPct}% de margen)
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -1410,7 +1425,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL EDITAR PROMO CON CÁLCULO DE GANANCIA */}
+      {/* MODAL EDITAR PROMO CON CÁLCULO DE GANANCIA VISIBLE */}
       {editingPromo && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -1485,27 +1500,38 @@ export default function App() {
               </div>
 
               <div>
-                <label className="text-fuchsia-400 font-bold block mb-1">Precio Final ($):</label>
+                <label className="text-slate-400 block mb-1 font-medium">Precio Final de Venta ($):</label>
                 <input
                   required
                   type="number"
                   step="any"
                   value={promoPriceInput}
                   onChange={(e) => setPromoPriceInput(e.target.value)}
-                  className="w-full bg-slate-950 border border-fuchsia-500/50 rounded-xl p-2.5 text-white font-mono"
+                  className="w-full bg-slate-950 border border-fuchsia-500/50 rounded-xl p-2.5 text-white font-mono text-sm focus:outline-none focus:border-fuchsia-400"
                 />
               </div>
 
-              {/* DETALLE DE GANANCIA DE LA PROMO EN EL MODAL */}
+              {/* CUADRO DESTACADO DE COSTO Y GANANCIA DE LA PROMO */}
               {promoItems.length > 0 && (
-                <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 space-y-1 font-mono text-xs">
-                  <div className="flex justify-between text-slate-400">
-                    <span>Costo total productos:</span>
-                    <span>{formatCurrency(currentPromoCost)}</span>
+                <div className="bg-slate-950 p-3.5 rounded-2xl border border-emerald-500/30 space-y-2">
+                  <div className="flex justify-between items-center text-xs text-slate-400">
+                    <span>Costo total productos del combo:</span>
+                    <span className="font-mono text-white font-bold">{formatCurrency(currentPromoCost)}</span>
                   </div>
-                  <div className="flex justify-between text-emerald-400 font-bold text-sm pt-1 border-t border-slate-800">
-                    <span>💰 Ganancia Estimada:</span>
-                    <span>{formatCurrency(currentPromoProfit)}</span>
+                  <div className="flex justify-between items-center text-xs pt-2 border-t border-slate-800">
+                    <span className="text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                      <TrendingUp className="w-4 h-4" /> Ganancia Limpia:
+                    </span>
+                    <div className="text-right">
+                      <span className="font-mono font-bold text-emerald-400 text-base block">
+                        {formatCurrency(currentPromoProfit)}
+                      </span>
+                      {currentPromoCost > 0 && currentPromoPrice > 0 && (
+                        <span className="text-[10px] text-emerald-300/80 font-mono">
+                          ({currentPromoMarginPct}% de margen)
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
