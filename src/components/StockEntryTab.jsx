@@ -11,10 +11,10 @@ export default function StockEntryTab({
   addToEntryCart,
   updateEntryQty,
   setEntryCart,
-  entryTotalCostInput,
-  setEntryTotalCostInput,
-  entryPaymentMethod,
-  setEntryPaymentMethod,
+  entryEfectivoInput,
+  setEntryEfectivoInput,
+  entryTransferenciaInput,
+  setEntryTransferenciaInput,
   handleRegisterStockEntry,
   handleDeleteStockEntry
 }) {
@@ -32,6 +32,10 @@ export default function StockEntryTab({
       prev.map((item) => (item.id === id ? { ...item, qty: newQty } : item))
     );
   };
+
+  const efctVal = parseFloat(entryEfectivoInput) || 0;
+  const transfVal = parseFloat(entryTransferenciaInput) || 0;
+  const calculatedTotal = efctVal + transfVal;
 
   return (
     <div className="space-y-8">
@@ -94,7 +98,7 @@ export default function StockEntryTab({
                 <div key={item.id} className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80 flex items-center justify-between text-xs">
                   <span className="font-medium text-slate-200 truncate flex-1 pr-2">{item.name}</span>
                   
-                  {/* CONTROLES CON CASILLA NUMÉRICA editable DIRECTA */}
+                  {/* CONTROLES CON CASILLA NUMÉRICA EDITABLE DIRECTA */}
                   <div className="flex items-center gap-1.5 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800">
                     <button
                       onClick={() => updateEntryQty(item.id, -1)}
@@ -121,36 +125,42 @@ export default function StockEntryTab({
             )}
           </div>
 
-          {/* CAMPOS DE MONTO Y MEDIO DE PAGO DE LA COMPRA */}
+          {/* CASILLEROS SEPARADOS PARA PAGO EN EFECTIVO Y MERCADO PAGO */}
           <div className="pt-3 border-t border-slate-800 space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-xs text-slate-400 block mb-1 font-medium">Costo Total ($):</label>
+                <label className="text-xs text-emerald-400 block mb-1 font-bold">💵 Pago Efectivo ($):</label>
                 <input
                   type="number"
                   step="any"
-                  placeholder="Ej: 50000"
-                  value={entryTotalCostInput}
-                  onChange={(e) => setEntryTotalCostInput(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-fuchsia-500"
+                  placeholder="0"
+                  value={entryEfectivoInput}
+                  onChange={(e) => setEntryEfectivoInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-slate-400 block mb-1 font-medium">Medio de Pago:</label>
-                <select
-                  value={entryPaymentMethod}
-                  onChange={(e) => setEntryPaymentMethod(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-medium focus:outline-none focus:border-fuchsia-500"
-                >
-                  <option value="Efectivo">💵 Efectivo</option>
-                  <option value="Transferencia">💳 Mercado Pago / Transf</option>
-                </select>
+                <label className="text-xs text-fuchsia-400 block mb-1 font-bold">💳 Pago MP / Transf ($):</label>
+                <input
+                  type="number"
+                  step="any"
+                  placeholder="0"
+                  value={entryTransferenciaInput}
+                  onChange={(e) => setEntryTransferenciaInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-fuchsia-500"
+                />
               </div>
             </div>
 
+            {/* TOTAL SUMADO EN TIEMPO REAL */}
+            <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 flex justify-between items-center text-xs">
+              <span className="text-slate-400 font-bold uppercase">Costo Total Compra:</span>
+              <span className="font-mono text-base font-bold text-white">{formatCurrency(calculatedTotal)}</span>
+            </div>
+
             <button
-              disabled={entryCart.length === 0}
+              disabled={entryCart.length === 0 || calculatedTotal <= 0}
               onClick={handleRegisterStockEntry}
               className="w-full bg-fuchsia-500 hover:bg-fuchsia-400 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-bold py-3.5 rounded-2xl transition shadow-lg shadow-fuchsia-500/20 flex items-center justify-center gap-2"
             >
@@ -170,39 +180,48 @@ export default function StockEntryTab({
           <p className="text-xs text-slate-500 text-center py-6">No hay registros de ingresos de mercadería.</p>
         ) : (
           <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-            {stockEntries.map((entry) => (
-              <div key={entry.id} className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between gap-3 text-xs">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-fuchsia-400">{entry.id}</span>
-                    <span className="text-slate-500 text-[11px] font-mono">{formatDate(entry.date)}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                      entry.paymentMethod === 'Transferencia'
-                        ? 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30'
-                        : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                    }`}>
-                      {entry.paymentMethod || 'Efectivo'}
-                    </span>
-                  </div>
-                  <p className="text-slate-300 text-[11px]">
-                    {entry.items?.map((i) => `${i.qty}x ${i.name}`).join(', ')}
-                  </p>
-                </div>
+            {stockEntries.map((entry) => {
+              const efct = entry.paidEfectivo ?? (entry.paymentMethod === 'Efectivo' ? entry.totalCost : 0);
+              const transf = entry.paidTransferencia ?? (entry.paymentMethod === 'Transferencia' ? entry.totalCost : 0);
 
-                <div className="flex items-center gap-3">
-                  <span className="font-mono font-bold text-white text-sm">
-                    {formatCurrency(entry.totalCost || 0)}
-                  </span>
-                  <button
-                    onClick={() => handleDeleteStockEntry(entry.id)}
-                    className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition"
-                    title="Eliminar este ingreso y descontar el stock sumado"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+              return (
+                <div key={entry.id} className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between gap-3 text-xs">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono font-bold text-fuchsia-400">{entry.id}</span>
+                      <span className="text-slate-500 text-[11px] font-mono">{formatDate(entry.date)}</span>
+                      
+                      {efct > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          💵 Efct: {formatCurrency(efct)}
+                        </span>
+                      )}
+                      {transf > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30">
+                          💳 MP: {formatCurrency(transf)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-slate-300 text-[11px]">
+                      {entry.items?.map((i) => `${i.qty}x ${i.name}`).join(', ')}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono font-bold text-white text-sm">
+                      {formatCurrency(entry.totalCost || 0)}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteStockEntry(entry.id)}
+                      className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition"
+                      title="Eliminar este ingreso y descontar el stock sumado"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

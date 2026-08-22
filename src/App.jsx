@@ -53,11 +53,11 @@ export default function App() {
   const [withdrawInput, setWithdrawInput] = useState('');
   const [withdrawNote, setWithdrawNote] = useState('');
 
-  // ESTADOS DE INGRESO DE MERCADERÍA
+  // ESTADOS DE INGRESO DE MERCADERÍA CON DESGLOSE DE PAGO
   const [entryCart, setEntryCart] = useState([]);
   const [entrySearchTerm, setEntrySearchTerm] = useState('');
-  const [entryTotalCostInput, setEntryTotalCostInput] = useState('');
-  const [entryPaymentMethod, setEntryPaymentMethod] = useState('Efectivo');
+  const [entryEfectivoInput, setEntryEfectivoInput] = useState('');
+  const [entryTransferenciaInput, setEntryTransferenciaInput] = useState('');
 
   // ESTADOS PARA MODALES Y FILTROS DE INVENTARIO
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('Todas');
@@ -137,22 +137,25 @@ export default function App() {
     await setDoc(doc(db, 'settings', 'config'), { salaryPercentage: newVal }, { merge: true });
   };
 
-  // --- CÁLCULO DE MÉTRICAS GLOBALES (DESCONTANDO COMPRA DE STOCK SEGÚN MEDIO DE PAGO) ---
+  // --- CÁLCULO DE MÉTRICAS GLOBALES CON PAGO MIXTO/DIVIDIDO DE MERCADERÍA ---
   const metrics = useMemo(() => {
     const paidSales = sales.filter((s) => s.paymentMethod !== 'Fiado');
 
     const rawRevenue = paidSales.reduce((acc, s) => acc + s.total, 0);
     const totalSalesCost = paidSales.reduce((acc, s) => acc + s.cost, 0);
-    const merchandiseExpenses = stockEntries.reduce((acc, e) => acc + (e.totalCost || 0), 0);
 
-    // Gastos de mercadería según si se pagaron en Efectivo o Mercado Pago / Transferencia
-    const merchandiseExpensesEfectivo = stockEntries
-      .filter((e) => (e.paymentMethod || 'Efectivo') === 'Efectivo')
-      .reduce((acc, e) => acc + (e.totalCost || 0), 0);
+    // Gastos de mercadería divididos exactamente según monto en Efectivo y Mercado Pago
+    const merchandiseExpensesEfectivo = stockEntries.reduce((acc, e) => {
+      if (e.paidEfectivo !== undefined) return acc + (e.paidEfectivo || 0);
+      return (e.paymentMethod || 'Efectivo') === 'Efectivo' ? acc + (e.totalCost || 0) : acc;
+    }, 0);
 
-    const merchandiseExpensesTransferencia = stockEntries
-      .filter((e) => e.paymentMethod === 'Transferencia')
-      .reduce((acc, e) => acc + (e.totalCost || 0), 0);
+    const merchandiseExpensesTransferencia = stockEntries.reduce((acc, e) => {
+      if (e.paidTransferencia !== undefined) return acc + (e.paidTransferencia || 0);
+      return e.paymentMethod === 'Transferencia' ? acc + (e.totalCost || 0) : acc;
+    }, 0);
+
+    const merchandiseExpenses = merchandiseExpensesEfectivo + merchandiseExpensesTransferencia;
 
     // Ventas brutas cobradas
     const rawEfectivoRevenue = paidSales
@@ -214,7 +217,7 @@ export default function App() {
     );
   }, [products, inventoryCategoryFilter]);
 
-  // --- FUNCIONES Y ACCIONES DEL SISTEMA ---
+  // --- REGISTRO DE VENTAS Y ACCIONES DE INVENTARIO ---
   const handleRegisterSale = async ({
     saleCart,
     selectedClient,
@@ -549,9 +552,13 @@ export default function App() {
     );
   };
 
+  // --- REGISTRO DE MERCADERÍA CON SOPORTE PARA PAGO DIVIDIDO ---
   const handleRegisterStockEntry = async () => {
     if (entryCart.length === 0) return;
-    const costVal = parseFloat(entryTotalCostInput) || 0;
+
+    const paidEfectivo = parseFloat(entryEfectivoInput) || 0;
+    const paidTransferencia = parseFloat(entryTransferenciaInput) || 0;
+    const totalCost = paidEfectivo + paidTransferencia;
 
     for (const item of entryCart) {
       const currentProd = products.find((p) => p.id === item.id);
@@ -564,8 +571,9 @@ export default function App() {
     const newEntry = {
       id: `ING-${Date.now().toString().slice(-4)}`,
       date: new Date().toISOString(),
-      totalCost: costVal,
-      paymentMethod: entryPaymentMethod,
+      totalCost,
+      paidEfectivo,
+      paidTransferencia,
       items: entryCart.map((i) => ({
         id: i.id,
         name: i.name,
@@ -576,9 +584,9 @@ export default function App() {
     await setDoc(doc(db, 'stock_entries', newEntry.id), newEntry);
 
     setEntryCart([]);
-    setEntryTotalCostInput('');
-    setEntryPaymentMethod('Efectivo');
-    notify(`📦 Ingreso de mercadería (${formatCurrency(costVal)}) descontado de ${entryPaymentMethod}`);
+    setEntryEfectivoInput('');
+    setEntryTransferenciaInput('');
+    notify(`📦 Ingreso de mercadería (${formatCurrency(totalCost)}) registrado`);
   };
 
   const handleDeleteStockEntry = async (entryId) => {
@@ -704,10 +712,10 @@ export default function App() {
             addToEntryCart={addToEntryCart}
             updateEntryQty={updateEntryQty}
             setEntryCart={setEntryCart}
-            entryTotalCostInput={entryTotalCostInput}
-            setEntryTotalCostInput={setEntryTotalCostInput}
-            entryPaymentMethod={entryPaymentMethod}
-            setEntryPaymentMethod={setEntryPaymentMethod}
+            entryEfectivoInput={entryEfectivoInput}
+            setEntryEfectivoInput={setEntryEfectivoInput}
+            entryTransferenciaInput={entryTransferenciaInput}
+            setEntryTransferenciaInput={setEntryTransferenciaInput}
             handleRegisterStockEntry={handleRegisterStockEntry}
             handleDeleteStockEntry={handleDeleteStockEntry}
           />
