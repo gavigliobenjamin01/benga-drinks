@@ -19,7 +19,7 @@ import PromosTab from './components/PromosTab';
 import StockEntryTab from './components/StockEntryTab';
 import ClientsTab from './components/ClientsTab';
 
-// ÍCONOS PARA MODALES Y NOTIFICACIONES
+// ÍCONOS
 import {
   Check,
   X,
@@ -47,28 +47,28 @@ export default function App() {
   const [stockEntries, setStockEntries] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
 
-  // ESTADOS DE CAJAS Y RETIRO DE PLATA
+  // CAJAS Y RETIROS
   const [showBoxesModal, setShowBoxesModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [salaryPercentage, setSalaryPercentage] = useState(50);
   const [withdrawInput, setWithdrawInput] = useState('');
   const [withdrawNote, setWithdrawNote] = useState('');
 
-  // ESTADOS DE INGRESO DE MERCADERÍA
+  // INGRESO MERCADERÍA
   const [entryCart, setEntryCart] = useState([]);
   const [entrySearchTerm, setEntrySearchTerm] = useState('');
   const [entryEfectivoInput, setEntryEfectivoInput] = useState('');
   const [entryTransferenciaInput, setEntryTransferenciaInput] = useState('');
 
-  // ESTADOS PARA PRECIOS Y MÁRGENES DE PRODUCTOS (MODALES)
+  // PRODUCTOS (PRECIOS/MÁRGENES)
   const [prodCostInput, setProdCostInput] = useState('');
   const [prodSellInput, setProdSellInput] = useState('');
   const [prodComboInput, setProdComboInput] = useState('');
 
-  // ESTADOS PARA PROMOS Y SU GANANCIA EN TIEMPO REAL
+  // PROMOS Y GANANCIAS EN MODAL
   const [promoPriceInput, setPromoPriceInput] = useState('');
 
-  // ESTADOS PARA MODALES Y FILTROS DE INVENTARIO
+  // FILTROS Y MODALES
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('Todas');
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
@@ -79,12 +79,12 @@ export default function App() {
   const [saleToPayModal, setSaleToPayModal] = useState(null);
   const [toast, setToast] = useState(null);
 
-  // ESTADOS PARA CONSTRUCCIÓN DE PROMOS
+  // CONSTRUCCIÓN DE PROMOS
   const [promoItems, setPromoItems] = useState([]);
   const [promoDescription, setPromoDescription] = useState('');
   const [selectedProdForPromo, setSelectedProdForPromo] = useState('');
 
-  // --- CONEXIÓN A FIRESTORE EN TIEMPO REAL ---
+  // FIRESTORE
   useEffect(() => {
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
       setProducts(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
@@ -146,7 +146,7 @@ export default function App() {
     await setDoc(doc(db, 'settings', 'config'), { salaryPercentage: newVal }, { merge: true });
   };
 
-  // --- CÁLCULO DE MÉTRICAS GLOBALES ---
+  // MÉTRICAS
   const metrics = useMemo(() => {
     const paidSales = sales.filter((s) => s.paymentMethod !== 'Fiado');
 
@@ -184,7 +184,7 @@ export default function App() {
     const netProfit = rawRevenue - totalSalesCost - merchandiseExpenses;
     const totalPendingDebt = clients.reduce((acc, c) => acc + c.debt, 0);
     const lowStockCount = products.filter((p) => p.stock <= p.minStock).length;
-    const stockValuation = products.reduce((acc, p) => acc + p.costPrice * p.stock, 0);
+    const stockValuation = products.reduce((acc, p) => acc + (p.costPrice || p.cost || 0) * p.stock, 0);
 
     const totalSalaryProfit = Math.max(0, netProfit * (salaryPercentage / 100));
     const totalWithdrawn = withdrawals.reduce((acc, w) => acc + (w.amount || 0), 0);
@@ -223,7 +223,6 @@ export default function App() {
     );
   }, [products, inventoryCategoryFilter]);
 
-  // --- BOTONES DE MARGEN RÁPIDO (+30%, +50%, +80%, +100%) ---
   const applySuggestedMargin = (multiplier) => {
     const cost = parseFloat(prodCostInput) || 0;
     if (cost <= 0) return;
@@ -231,7 +230,6 @@ export default function App() {
     setProdSellInput(suggestedPrice.toString());
   };
 
-  // --- REGISTRO DE VENTAS Y ACCIONES ---
   const handleRegisterSale = async ({
     saleCart,
     selectedClient,
@@ -404,8 +402,8 @@ export default function App() {
 
   const openEditProductModal = (prod) => {
     setEditingProduct(prod);
-    setProdCostInput(prod.costPrice?.toString() || '');
-    setProdSellInput(prod.sellPrice?.toString() || '');
+    setProdCostInput((prod.costPrice ?? prod.cost)?.toString() || '');
+    setProdSellInput((prod.sellPrice ?? prod.price)?.toString() || '');
     setProdComboInput(prod.comboPrice?.toString() || '');
   };
 
@@ -437,8 +435,8 @@ export default function App() {
       name: fd.get('name'),
       brand: fd.get('brand'),
       category: fd.get('category'),
-      costPrice: parseFloat(prodCostInput) || editingProduct.costPrice,
-      sellPrice: parseFloat(prodSellInput) || editingProduct.sellPrice,
+      costPrice: parseFloat(prodCostInput) || editingProduct.costPrice || 0,
+      sellPrice: parseFloat(prodSellInput) || editingProduct.sellPrice || 0,
       comboPrice: parseFloat(prodComboInput) || (editingProduct.comboPrice || 0),
       minStock: parseInt(fd.get('minStock'), 10) || editingProduct.minStock
     };
@@ -664,7 +662,7 @@ export default function App() {
     notify('🗑️ Retiro devuelto al saldo disponible');
   };
 
-  // CÁLCULOS DINÁMICOS DE MÁRGENES Y GANANCIAS EN MODALES
+  // CÁLCULOS EN MODALES
   const prodCostNum = parseFloat(prodCostInput) || 0;
   const prodSellNum = parseFloat(prodSellInput) || 0;
   const prodProfit = prodSellNum - prodCostNum;
@@ -673,7 +671,8 @@ export default function App() {
   const currentPromoCost = useMemo(() => {
     return promoItems.reduce((acc, item) => {
       const p = products.find((prod) => prod.id === item.productId);
-      return acc + (p ? (p.costPrice || 0) * item.quantity : 0);
+      const cost = p ? (p.costPrice ?? p.cost ?? 0) : 0;
+      return acc + cost * item.quantity;
     }, 0);
   }, [promoItems, products]);
 
@@ -683,7 +682,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row antialiased">
-      {/* NOTIFICACIÓN TOAST */}
+      {/* TOAST */}
       {toast && (
         <div className="fixed top-5 right-5 z-[100] bg-fuchsia-500 text-slate-950 px-4 py-3 rounded-2xl font-bold shadow-2xl shadow-fuchsia-500/40 flex items-center gap-2 animate-bounce">
           <Check className="w-5 h-5 stroke-[3]" />
@@ -691,7 +690,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MENÚ LATERAL */}
+      {/* SIDEBAR */}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} metrics={metrics} />
 
       {/* ÁREA PRINCIPAL */}
@@ -774,7 +773,7 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL RETIRO DE PLATA */}
+      {/* MODAL RETIRO */}
       {showWithdrawModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -874,7 +873,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL DE LAS 3 CAJAS */}
+      {/* MODAL CAJAS */}
       {showBoxesModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -959,7 +958,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL COBRAR VENTA FIADA */}
+      {/* MODAL COBRAR FIADO */}
       {saleToPayModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl">
@@ -1027,7 +1026,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL NUEVO PRODUCTO CON CALCULADORA DE PRECIO/MARGEN */}
+      {/* MODAL NUEVO PRODUCTO */}
       {showProductModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl">
@@ -1047,11 +1046,10 @@ export default function App() {
                 </div>
                 <div>
                   <label className="text-slate-400 block mb-1">Categoría:</label>
-                  <input required name="category" placeholder="Ej: Hielo / Hielos / Agregados" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
+                  <input required name="category" placeholder="Ej: Hielo / Agregados" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
                 </div>
               </div>
 
-              {/* CAMPOS DE PRECIOS Y CALCULADORA DE MARGEN */}
               <div className="space-y-2.5 bg-slate-950/70 p-3 rounded-2xl border border-slate-800">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -1081,46 +1079,20 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* BOTONES DE MARGEN RÁPIDO */}
                 {prodCostNum > 0 && (
                   <div className="space-y-1.5 pt-1">
                     <span className="text-[10px] text-slate-400 font-semibold uppercase flex items-center gap-1">
                       <Calculator className="w-3 h-3 text-fuchsia-400" /> Precios Sugeridos por Margen:
                     </span>
                     <div className="grid grid-cols-4 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => applySuggestedMargin(1.3)}
-                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
-                      >
-                        +30%
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => applySuggestedMargin(1.5)}
-                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
-                      >
-                        +50%
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => applySuggestedMargin(1.8)}
-                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
-                      >
-                        +80%
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => applySuggestedMargin(2.0)}
-                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
-                      >
-                        +100%
-                      </button>
+                      <button type="button" onClick={() => applySuggestedMargin(1.3)} className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 py-1.5 rounded-lg text-[11px] font-mono font-bold">+30%</button>
+                      <button type="button" onClick={() => applySuggestedMargin(1.5)} className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 py-1.5 rounded-lg text-[11px] font-mono font-bold">+50%</button>
+                      <button type="button" onClick={() => applySuggestedMargin(1.8)} className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 py-1.5 rounded-lg text-[11px] font-mono font-bold">+80%</button>
+                      <button type="button" onClick={() => applySuggestedMargin(2.0)} className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 py-1.5 rounded-lg text-[11px] font-mono font-bold">+100%</button>
                     </div>
                   </div>
                 )}
 
-                {/* INDICADOR DE GANANCIA Y MARGEN OBTENIDO */}
                 {prodCostNum > 0 && prodSellNum > 0 && (
                   <div className="bg-slate-900 p-2 rounded-xl border border-emerald-500/20 flex justify-between items-center text-[11px]">
                     <span className="text-emerald-400 font-bold">Ganancia por unidad:</span>
@@ -1190,7 +1162,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* CAMPOS DE PRECIOS CON MARGEN Y GANANCIA */}
               <div className="space-y-2.5 bg-slate-950/70 p-3 rounded-2xl border border-slate-800">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -1217,46 +1188,20 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* BOTONES DE MARGEN RÁPIDO */}
                 {prodCostNum > 0 && (
                   <div className="space-y-1.5 pt-1">
                     <span className="text-[10px] text-slate-400 font-semibold uppercase flex items-center gap-1">
                       <Calculator className="w-3 h-3 text-fuchsia-400" /> Precios Sugeridos por Margen:
                     </span>
                     <div className="grid grid-cols-4 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => applySuggestedMargin(1.3)}
-                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
-                      >
-                        +30%
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => applySuggestedMargin(1.5)}
-                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
-                      >
-                        +50%
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => applySuggestedMargin(1.8)}
-                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
-                      >
-                        +80%
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => applySuggestedMargin(2.0)}
-                        className="bg-slate-900 hover:bg-fuchsia-500/20 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 hover:text-fuchsia-300 py-1.5 rounded-lg text-[11px] font-mono font-bold transition"
-                      >
-                        +100%
-                      </button>
+                      <button type="button" onClick={() => applySuggestedMargin(1.3)} className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 py-1.5 rounded-lg text-[11px] font-mono font-bold">+30%</button>
+                      <button type="button" onClick={() => applySuggestedMargin(1.5)} className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 py-1.5 rounded-lg text-[11px] font-mono font-bold">+50%</button>
+                      <button type="button" onClick={() => applySuggestedMargin(1.8)} className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 py-1.5 rounded-lg text-[11px] font-mono font-bold">+80%</button>
+                      <button type="button" onClick={() => applySuggestedMargin(2.0)} className="bg-slate-900 border border-slate-800 hover:border-fuchsia-500/40 text-slate-300 py-1.5 rounded-lg text-[11px] font-mono font-bold">+100%</button>
                     </div>
                   </div>
                 )}
 
-                {/* GANANCIA Y MARGEN */}
                 {prodCostNum > 0 && prodSellNum > 0 && (
                   <div className="bg-slate-900 p-2 rounded-xl border border-emerald-500/20 flex justify-between items-center text-[11px]">
                     <span className="text-emerald-400 font-bold">Ganancia por unidad:</span>
@@ -1286,19 +1231,15 @@ export default function App() {
                 <input required type="number" name="minStock" defaultValue={editingProduct.minStock} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white font-mono" />
               </div>
               <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => setEditingProduct(null)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition">
-                  Cancelar
-                </button>
-                <button type="submit" className="flex-1 bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 font-bold py-3 rounded-xl transition shadow-lg shadow-fuchsia-500/20">
-                  Guardar Cambios
-                </button>
+                <button type="button" onClick={() => setEditingProduct(null)} className="flex-1 bg-slate-800 text-slate-300 font-bold py-3 rounded-xl">Cancelar</button>
+                <button type="submit" className="flex-1 bg-fuchsia-500 text-slate-950 font-bold py-3 rounded-xl shadow-lg shadow-fuchsia-500/20">Guardar Cambios</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL CREAR PROMO CON CÁLCULO DE GANANCIA VISIBLE */}
+      {/* MODAL CREAR PROMO CON CÁLCULO VISIBLE DE GANANCIA */}
       {showPromoModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -1383,9 +1324,9 @@ export default function App() {
                 />
               </div>
 
-              {/* CUADRO DESTACADO DE COSTO Y GANANCIA DE LA PROMO */}
+              {/* CUADRO VERDE DE COSTO Y GANANCIA DE LA PROMO */}
               {promoItems.length > 0 && (
-                <div className="bg-slate-950 p-3.5 rounded-2xl border border-emerald-500/30 space-y-2">
+                <div className="bg-slate-950 p-3.5 rounded-2xl border border-emerald-500/40 space-y-2">
                   <div className="flex justify-between items-center text-xs text-slate-400">
                     <span>Costo total productos del combo:</span>
                     <span className="font-mono text-white font-bold">{formatCurrency(currentPromoCost)}</span>
@@ -1425,7 +1366,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL EDITAR PROMO CON CÁLCULO DE GANANCIA VISIBLE */}
+      {/* MODAL EDITAR PROMO CON CÁLCULO VISIBLE DE GANANCIA */}
       {editingPromo && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -1511,9 +1452,9 @@ export default function App() {
                 />
               </div>
 
-              {/* CUADRO DESTACADO DE COSTO Y GANANCIA DE LA PROMO */}
+              {/* CUADRO VERDE DE COSTO Y GANANCIA DE LA PROMO */}
               {promoItems.length > 0 && (
-                <div className="bg-slate-950 p-3.5 rounded-2xl border border-emerald-500/30 space-y-2">
+                <div className="bg-slate-950 p-3.5 rounded-2xl border border-emerald-500/40 space-y-2">
                   <div className="flex justify-between items-center text-xs text-slate-400">
                     <span>Costo total productos del combo:</span>
                     <span className="font-mono text-white font-bold">{formatCurrency(currentPromoCost)}</span>
@@ -1547,12 +1488,8 @@ export default function App() {
                 />
               </div>
               <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => setEditingPromo(null)} className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-3 rounded-xl transition">
-                  Cancelar
-                </button>
-                <button type="submit" className="flex-1 bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 font-bold py-3 rounded-xl transition shadow-lg shadow-fuchsia-500/20">
-                  Guardar Cambios
-                </button>
+                <button type="button" onClick={() => setEditingPromo(null)} className="flex-1 bg-slate-800 text-slate-300 font-bold py-3 rounded-xl">Cancelar</button>
+                <button type="submit" className="flex-1 bg-fuchsia-500 text-slate-950 font-bold py-3 rounded-xl shadow-lg shadow-fuchsia-500/20">Guardar Cambios</button>
               </div>
             </form>
           </div>
@@ -1583,7 +1520,7 @@ export default function App() {
                 <label className="text-slate-400 block mb-1">Teléfono:</label>
                 <input name="phone" placeholder="+54 9 11 ..." className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
               </div>
-              <button type="submit" className="w-full bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 font-bold py-3 rounded-xl transition mt-2">Guardar Cliente</button>
+              <button type="submit" className="w-full bg-fuchsia-500 text-slate-950 font-bold py-3 rounded-xl transition mt-2">Guardar Cliente</button>
             </form>
           </div>
         </div>
