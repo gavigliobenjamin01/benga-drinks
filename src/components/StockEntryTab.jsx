@@ -13,6 +13,8 @@ export default function StockEntryTab({
   setEntryCart,
   entryTotalCostInput,
   setEntryTotalCostInput,
+  entryPaymentMethod,
+  setEntryPaymentMethod,
   handleRegisterStockEntry,
   handleDeleteStockEntry
 }) {
@@ -22,10 +24,20 @@ export default function StockEntryTab({
       p.brand?.toLowerCase().includes(entrySearchTerm.toLowerCase())
   );
 
+  // PERMITIR ESCRIBIR LA CANTIDAD DIRECTAMENTE CON EL TECLADO
+  const handleDirectQtyChange = (id, value) => {
+    const parsed = parseInt(value, 10);
+    const newQty = isNaN(parsed) || parsed < 1 ? 1 : parsed;
+    setEntryCart((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, qty: newQty } : item))
+    );
+  };
+
   return (
     <div className="space-y-8">
       {/* SECCIÓN REGISTRO DE INGRESO */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* LADO IZQUIERDO: BUSCADOR Y PRODUCTOS */}
         <div className="lg:col-span-7 space-y-4">
           <div className="relative">
             <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
@@ -58,6 +70,7 @@ export default function StockEntryTab({
           </div>
         </div>
 
+        {/* LADO DERECHO: DETALLE DEL INGRESO */}
         <div className="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl">
           <div className="flex justify-between items-center pb-3 border-b border-slate-800">
             <h2 className="font-bold text-base text-white flex items-center gap-2">
@@ -70,6 +83,7 @@ export default function StockEntryTab({
             )}
           </div>
 
+          {/* LISTA DE ÍTEMS A INGRESAR */}
           <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
             {entryCart.length === 0 ? (
               <p className="text-xs text-slate-500 text-center py-8">
@@ -79,27 +93,60 @@ export default function StockEntryTab({
               entryCart.map((item) => (
                 <div key={item.id} className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80 flex items-center justify-between text-xs">
                   <span className="font-medium text-slate-200 truncate flex-1 pr-2">{item.name}</span>
-                  <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800">
-                    <button onClick={() => updateEntryQty(item.id, -1)} className="text-slate-400 hover:text-white px-1 font-bold">-</button>
-                    <span className="font-mono font-bold text-white px-1">+{item.qty}</span>
-                    <button onClick={() => updateEntryQty(item.id, 1)} className="text-slate-400 hover:text-white px-1 font-bold">+</button>
+                  
+                  {/* CONTROLES CON CASILLA NUMÉRICA editable DIRECTA */}
+                  <div className="flex items-center gap-1.5 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800">
+                    <button
+                      onClick={() => updateEntryQty(item.id, -1)}
+                      className="text-slate-400 hover:text-white px-1.5 font-bold text-sm"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      value={item.qty}
+                      onChange={(e) => handleDirectQtyChange(item.id, e.target.value)}
+                      className="w-14 text-center bg-slate-950 text-white font-mono font-bold rounded-lg border border-slate-800 py-1 text-xs focus:outline-none focus:border-fuchsia-500"
+                    />
+                    <button
+                      onClick={() => updateEntryQty(item.id, 1)}
+                      className="text-slate-400 hover:text-white px-1.5 font-bold text-sm"
+                    >
+                      +
+                    </button>
                   </div>
                 </div>
               ))
             )}
           </div>
 
+          {/* CAMPOS DE MONTO Y MEDIO DE PAGO DE LA COMPRA */}
           <div className="pt-3 border-t border-slate-800 space-y-3">
-            <div>
-              <label className="text-xs text-slate-400 block mb-1 font-medium">Costo Total de esta Compra ($):</label>
-              <input
-                type="number"
-                step="any"
-                placeholder="Ej: 50000"
-                value={entryTotalCostInput}
-                onChange={(e) => setEntryTotalCostInput(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-fuchsia-500"
-              />
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1 font-medium">Costo Total ($):</label>
+                <input
+                  type="number"
+                  step="any"
+                  placeholder="Ej: 50000"
+                  value={entryTotalCostInput}
+                  onChange={(e) => setEntryTotalCostInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-fuchsia-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 block mb-1 font-medium">Medio de Pago:</label>
+                <select
+                  value={entryPaymentMethod}
+                  onChange={(e) => setEntryPaymentMethod(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-medium focus:outline-none focus:border-fuchsia-500"
+                >
+                  <option value="Efectivo">💵 Efectivo</option>
+                  <option value="Transferencia">💳 Mercado Pago / Transf</option>
+                </select>
+              </div>
             </div>
 
             <button
@@ -113,7 +160,7 @@ export default function StockEntryTab({
         </div>
       </div>
 
-      {/* HISTORIAL DE INGRESOS */}
+      {/* SECCIÓN HISTORIAL DE INGRESOS */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
         <h3 className="font-bold text-base text-white flex items-center gap-2 border-b border-slate-800 pb-3">
           <History className="w-5 h-5 text-fuchsia-400" /> Historial de Ingresos de Mercadería
@@ -129,6 +176,13 @@ export default function StockEntryTab({
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold text-fuchsia-400">{entry.id}</span>
                     <span className="text-slate-500 text-[11px] font-mono">{formatDate(entry.date)}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                      entry.paymentMethod === 'Transferencia'
+                        ? 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30'
+                        : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    }`}>
+                      {entry.paymentMethod || 'Efectivo'}
+                    </span>
                   </div>
                   <p className="text-slate-300 text-[11px]">
                     {entry.items?.map((i) => `${i.qty}x ${i.name}`).join(', ')}

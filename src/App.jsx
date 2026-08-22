@@ -57,6 +57,7 @@ export default function App() {
   const [entryCart, setEntryCart] = useState([]);
   const [entrySearchTerm, setEntrySearchTerm] = useState('');
   const [entryTotalCostInput, setEntryTotalCostInput] = useState('');
+  const [entryPaymentMethod, setEntryPaymentMethod] = useState('Efectivo');
 
   // ESTADOS PARA MODALES Y FILTROS DE INVENTARIO
   const [inventoryCategoryFilter, setInventoryCategoryFilter] = useState('Todas');
@@ -136,22 +137,35 @@ export default function App() {
     await setDoc(doc(db, 'settings', 'config'), { salaryPercentage: newVal }, { merge: true });
   };
 
-  // --- CÁLCULO DE MÉTRICAS GLOBALES (SOLO VENTAS YA PAGADAS) ---
+  // --- CÁLCULO DE MÉTRICAS GLOBALES (DESCONTANDO COMPRA DE STOCK SEGÚN MEDIO DE PAGO) ---
   const metrics = useMemo(() => {
-    // FILTRAMOS SOLO LAS VENTAS QUE NO SEAN FIADAS (EFECTIVO O TRANSFERENCIA)
     const paidSales = sales.filter((s) => s.paymentMethod !== 'Fiado');
 
     const rawRevenue = paidSales.reduce((acc, s) => acc + s.total, 0);
     const totalSalesCost = paidSales.reduce((acc, s) => acc + s.cost, 0);
     const merchandiseExpenses = stockEntries.reduce((acc, e) => acc + (e.totalCost || 0), 0);
 
-    const efectivoRevenue = paidSales
+    // Gastos de mercadería según si se pagaron en Efectivo o Mercado Pago / Transferencia
+    const merchandiseExpensesEfectivo = stockEntries
+      .filter((e) => (e.paymentMethod || 'Efectivo') === 'Efectivo')
+      .reduce((acc, e) => acc + (e.totalCost || 0), 0);
+
+    const merchandiseExpensesTransferencia = stockEntries
+      .filter((e) => e.paymentMethod === 'Transferencia')
+      .reduce((acc, e) => acc + (e.totalCost || 0), 0);
+
+    // Ventas brutas cobradas
+    const rawEfectivoRevenue = paidSales
       .filter((s) => s.paymentMethod === 'Efectivo')
       .reduce((acc, s) => acc + s.total, 0);
 
-    const transferenciaRevenue = paidSales
+    const rawTransferenciaRevenue = paidSales
       .filter((s) => s.paymentMethod === 'Transferencia')
       .reduce((acc, s) => acc + s.total, 0);
+
+    // Saldo real en cada caja restando los gastos de stock correspondientes
+    const efectivoRevenue = rawEfectivoRevenue - merchandiseExpensesEfectivo;
+    const transferenciaRevenue = rawTransferenciaRevenue - merchandiseExpensesTransferencia;
 
     const fiadoRevenue = sales
       .filter((s) => s.paymentMethod === 'Fiado')
@@ -551,6 +565,7 @@ export default function App() {
       id: `ING-${Date.now().toString().slice(-4)}`,
       date: new Date().toISOString(),
       totalCost: costVal,
+      paymentMethod: entryPaymentMethod,
       items: entryCart.map((i) => ({
         id: i.id,
         name: i.name,
@@ -562,7 +577,8 @@ export default function App() {
 
     setEntryCart([]);
     setEntryTotalCostInput('');
-    notify(`📦 Ingreso de mercadería registrado (${formatCurrency(costVal)}) y stock actualizado`);
+    setEntryPaymentMethod('Efectivo');
+    notify(`📦 Ingreso de mercadería (${formatCurrency(costVal)}) descontado de ${entryPaymentMethod}`);
   };
 
   const handleDeleteStockEntry = async (entryId) => {
@@ -690,6 +706,8 @@ export default function App() {
             setEntryCart={setEntryCart}
             entryTotalCostInput={entryTotalCostInput}
             setEntryTotalCostInput={setEntryTotalCostInput}
+            entryPaymentMethod={entryPaymentMethod}
+            setEntryPaymentMethod={setEntryPaymentMethod}
             handleRegisterStockEntry={handleRegisterStockEntry}
             handleDeleteStockEntry={handleDeleteStockEntry}
           />
