@@ -43,28 +43,58 @@ export default function SalesTab({
     return ['Todas', 'Promos', ...cats];
   }, [products]);
 
-  // FILTRAR CATÁLOGO
+  // FILTRAR CATÁLOGO (BUSCA EN PRODUCTOS Y DENTRO DE LOS COMBOS/PROMOS)
   const filteredCatalog = useMemo(() => {
-    const term = searchTerm.toLowerCase();
+    const term = searchTerm.toLowerCase().trim();
+
+    // Función auxiliar para saber si una promo coincide con la búsqueda
+    const promoMatches = (pr) => {
+      if (!pr.active) return false;
+      if (!term) return true;
+
+      const nameMatch = (pr.name || '').toLowerCase().includes(term);
+      const descMatch = (pr.description || '').toLowerCase().includes(term);
+
+      // Revisa las bebidas que integran el combo desde el inventario
+      const itemsMatch = (pr.items || []).some((item) => {
+        const pObj = products.find((p) => p.id === item.productId);
+        if (!pObj) return false;
+        return (
+          (pObj.name || '').toLowerCase().includes(term) ||
+          (pObj.brand || '').toLowerCase().includes(term)
+        );
+      });
+
+      return nameMatch || descMatch || itemsMatch;
+    };
 
     if (selectedCategory === 'Promos') {
       return promos
-        .filter((pr) => pr.active && pr.name?.toLowerCase().includes(term))
+        .filter(promoMatches)
         .map((pr) => ({ ...pr, isPromo: true }));
     }
 
-    let prods = products.filter(
-      (p) =>
-        p.name?.toLowerCase().includes(term) ||
-        p.brand?.toLowerCase().includes(term) ||
-        p.category?.toLowerCase().includes(term)
-    );
+    let matchingPromos = [];
+    if (selectedCategory === 'Todas' && term) {
+      matchingPromos = promos.filter(promoMatches).map((pr) => ({ ...pr, isPromo: true }));
+    }
+
+    let prods = products.filter((p) => {
+      if (!term) return true;
+      return (
+        (p.name || '').toLowerCase().includes(term) ||
+        (p.brand || '').toLowerCase().includes(term) ||
+        (p.category || '').toLowerCase().includes(term)
+      );
+    });
 
     if (selectedCategory !== 'Todas') {
       prods = prods.filter((p) => p.category === selectedCategory);
     }
 
-    return prods.map((p) => ({ ...p, isPromo: false }));
+    const matchingProducts = prods.map((p) => ({ ...p, isPromo: false }));
+
+    return [...matchingPromos, ...matchingProducts];
   }, [products, promos, searchTerm, selectedCategory]);
 
   // AGREGAR AL CARRITO
@@ -77,13 +107,14 @@ export default function SalesTab({
         );
       }
 
-      let price = item.isPromo ? item.price : item.sellPrice;
+      let price = item.isPromo ? item.price : (item.sellPrice || item.price || 0);
       let cost = item.isPromo
         ? (item.items || []).reduce((acc, comp) => {
             const pObj = products.find((p) => p.id === comp.productId);
-            return acc + (pObj ? pObj.costPrice * comp.quantity : 0);
+            const pCost = pObj ? (pObj.costPrice ?? pObj.cost ?? 0) : 0;
+            return acc + (pCost * comp.quantity);
           }, 0)
-        : item.costPrice;
+        : (item.costPrice ?? item.cost ?? 0);
 
       return [
         ...prev,
@@ -199,7 +230,6 @@ export default function SalesTab({
         type: 'image/png'
       });
 
-      // ARMAR EL MENSAJE PERSONALIZADO SEGÚN EL CLIENTE
       const clientName = ticketModalData.client;
       const customText = clientName && clientName !== 'Cliente Casual'
         ? `¡Muchas gracias, ${clientName}! 🙌🍹 Acá te dejo el ticket de tu pedido ✨`
@@ -257,7 +287,7 @@ export default function SalesTab({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
           {filteredCatalog.map((item) => (
             <div
-              key={item.id}
+              key={`${item.isPromo ? 'pr' : 'prod'}-${item.id}`}
               onClick={() => addToCart(item)}
               className={`border p-3.5 rounded-2xl cursor-pointer transition flex items-center justify-between group hover:scale-[1.01] ${
                 item.isPromo
@@ -278,7 +308,7 @@ export default function SalesTab({
                   </p>
                 )}
                 <div className="font-mono text-sm font-bold text-emerald-400">
-                  {formatCurrency(item.isPromo ? item.price : item.sellPrice)}
+                  {formatCurrency(item.isPromo ? item.price : (item.sellPrice || item.price))}
                 </div>
               </div>
 
@@ -287,6 +317,12 @@ export default function SalesTab({
               </div>
             </div>
           ))}
+
+          {filteredCatalog.length === 0 && (
+            <div className="col-span-full bg-slate-900/50 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-xs">
+              No se encontraron bebidas ni combos que coincidan con "{searchTerm}".
+            </div>
+          )}
         </div>
       </div>
 
