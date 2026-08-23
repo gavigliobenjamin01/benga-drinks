@@ -38,7 +38,8 @@ import {
   Calculator,
   Bell,
   ShoppingBag,
-  CheckCircle2
+  CheckCircle2,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export default function App() {
@@ -466,6 +467,7 @@ export default function App() {
       name: fd.get('name'),
       brand: fd.get('brand'),
       category: fd.get('category'),
+      imageUrl: fd.get('imageUrl') || '',
       costPrice: parseFloat(prodCostInput) || 0,
       sellPrice: parseFloat(prodSellInput) || 0,
       comboPrice: parseFloat(prodComboInput) || 0,
@@ -486,6 +488,7 @@ export default function App() {
       name: fd.get('name'),
       brand: fd.get('brand'),
       category: fd.get('category'),
+      imageUrl: fd.get('imageUrl') || editingProduct.imageUrl || '',
       costPrice: parseFloat(prodCostInput) || editingProduct.costPrice || 0,
       sellPrice: parseFloat(prodSellInput) || editingProduct.sellPrice || 0,
       comboPrice: parseFloat(prodComboInput) || (editingProduct.comboPrice || 0),
@@ -558,6 +561,7 @@ export default function App() {
       id: `pr-${Date.now()}`,
       name: fd.get('name'),
       type: fd.get('type'),
+      imageUrl: fd.get('imageUrl') || '',
       price: parseFloat(promoPriceInput) || 0,
       active: true,
       description: promoDescription || fd.get('description') || '',
@@ -583,6 +587,7 @@ export default function App() {
     const updatedData = {
       name: fd.get('name'),
       type: fd.get('type'),
+      imageUrl: fd.get('imageUrl') || editingPromo.imageUrl || '',
       price: parseFloat(promoPriceInput) || editingPromo.price,
       description: promoDescription || fd.get('description') || '',
       items: promoItems
@@ -1154,10 +1159,10 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL NUEVO PRODUCTO */}
+      {/* MODAL NUEVO PRODUCTO (CON CAMPO FOTO) */}
       {showProductModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h3 className="font-bold text-base text-white">Nuevo Producto</h3>
               <button onClick={() => setShowProductModal(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
@@ -1176,6 +1181,18 @@ export default function App() {
                   <label className="text-slate-400 block mb-1">Categoría:</label>
                   <input required name="category" placeholder="Ej: Hielo / Agregados" className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
                 </div>
+              </div>
+
+              {/* CAMPO DE LINK DE FOTO */}
+              <div className="bg-slate-950/70 p-3 rounded-2xl border border-fuchsia-500/30 space-y-1">
+                <label className="text-fuchsia-400 font-bold block mb-1 flex items-center gap-1.5">
+                  <ImageIcon className="w-4 h-4" /> Link de Imagen / Foto (URL Opcional):
+                </label>
+                <input
+                  name="imageUrl"
+                  placeholder="https://ejemplo.com/foto-producto.jpg"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white text-xs focus:outline-none focus:border-fuchsia-500"
+                />
               </div>
 
               <div className="space-y-2.5 bg-slate-950/70 p-3 rounded-2xl border border-slate-800">
@@ -1264,10 +1281,10 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL EDITAR PRODUCTO */}
+      {/* MODAL EDITAR PRODUCTO (CON CAMPO FOTO) */}
       {editingProduct && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h3 className="font-bold text-base text-white flex items-center gap-2">
                 <Pencil className="w-4 h-4 text-fuchsia-400" /> Modificar Precios / Producto
@@ -1288,6 +1305,19 @@ export default function App() {
                   <label className="text-slate-400 block mb-1">Categoría:</label>
                   <input required name="category" defaultValue={editingProduct.category} className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white" />
                 </div>
+              </div>
+
+              {/* CAMPO DE LINK DE FOTO */}
+              <div className="bg-slate-950/70 p-3 rounded-2xl border border-fuchsia-500/30 space-y-1">
+                <label className="text-fuchsia-400 font-bold block mb-1 flex items-center gap-1.5">
+                  <ImageIcon className="w-4 h-4" /> Link de Imagen / Foto (URL):
+                </label>
+                <input
+                  name="imageUrl"
+                  defaultValue={editingProduct.imageUrl || ''}
+                  placeholder="https://ejemplo.com/foto-producto.jpg"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white text-xs focus:outline-none focus:border-fuchsia-500"
+                />
               </div>
 
               <div className="space-y-2.5 bg-slate-950/70 p-3 rounded-2xl border border-slate-800">
@@ -1367,7 +1397,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL CREAR PROMO CON CÁLCULO VISIBLE DE GANANCIA */}
+      {/* MODAL CREAR PROMO (CON CAMPO FOTO) */}
       {showPromoModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -1387,6 +1417,18 @@ export default function App() {
                   <option value="discount">Descuento especial (%)</option>
                   <option value="custom">2x1 / Regalo / Especial</option>
                 </select>
+              </div>
+
+              {/* CAMPO DE LINK DE FOTO */}
+              <div className="bg-slate-950/70 p-3 rounded-2xl border border-fuchsia-500/30 space-y-1">
+                <label className="text-fuchsia-400 font-bold block mb-1 flex items-center gap-1.5">
+                  <ImageIcon className="w-4 h-4" /> Link de Imagen / Foto (URL Opcional):
+                </label>
+                <input
+                  name="imageUrl"
+                  placeholder="https://ejemplo.com/foto-promo.jpg"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white text-xs focus:outline-none focus:border-fuchsia-500"
+                />
               </div>
 
               <div className="bg-slate-950/70 p-3 rounded-2xl border border-slate-800 space-y-2">
@@ -1493,7 +1535,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL EDITAR PROMO CON CÁLCULO VISIBLE DE GANANCIA */}
+      {/* MODAL EDITAR PROMO (CON CAMPO FOTO) */}
       {editingPromo && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -1515,6 +1557,19 @@ export default function App() {
                   <option value="discount">Descuento especial (%)</option>
                   <option value="custom">2x1 / Regalo / Especial</option>
                 </select>
+              </div>
+
+              {/* CAMPO DE LINK DE FOTO */}
+              <div className="bg-slate-950/70 p-3 rounded-2xl border border-fuchsia-500/30 space-y-1">
+                <label className="text-fuchsia-400 font-bold block mb-1 flex items-center gap-1.5">
+                  <ImageIcon className="w-4 h-4" /> Link de Imagen / Foto (URL):
+                </label>
+                <input
+                  name="imageUrl"
+                  defaultValue={editingPromo.imageUrl || ''}
+                  placeholder="https://ejemplo.com/foto-promo.jpg"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white text-xs focus:outline-none focus:border-fuchsia-500"
+                />
               </div>
 
               <div className="bg-slate-950/70 p-3 rounded-2xl border border-slate-800 space-y-2">

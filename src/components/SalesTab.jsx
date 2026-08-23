@@ -12,7 +12,8 @@ import {
   MapPin,
   UserCheck,
   DollarSign,
-  Receipt
+  Receipt,
+  Image as ImageIcon
 } from 'lucide-react';
 import { formatCurrency } from '../utils';
 
@@ -65,7 +66,7 @@ export default function SalesTab({
   // CATEGORÍAS
   const categories = useMemo(() => {
     const cats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
-    return ['Todas', 'Promos', ...cats];
+    return ['Todas', '🔥 Promos & Combos', ...cats];
   }, [products]);
 
   // FILTRADO CON BÚSQUEDA DENTRO DE COMBOS
@@ -90,7 +91,7 @@ export default function SalesTab({
       return nameMatch || descMatch || itemsMatch;
     };
 
-    if (selectedCategory === 'Promos') {
+    if (selectedCategory === '🔥 Promos & Combos') {
       return promos.filter(promoMatches).map((pr) => ({ ...pr, isPromo: true }));
     }
 
@@ -304,7 +305,7 @@ export default function SalesTab({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-      {/* LADO IZQUIERDO: CATÁLOGO */}
+      {/* LADO IZQUIERDO: CATÁLOGO DE TARJETAS VISUALES */}
       <div className="lg:col-span-7 space-y-4">
         <div className="space-y-3">
           <div className="relative">
@@ -329,42 +330,64 @@ export default function SalesTab({
                     : 'bg-slate-900/80 text-slate-400 border-slate-800 hover:border-slate-700'
                 }`}
               >
-                {cat === 'Promos' ? '🔥 Promos & Combos' : cat}
+                {cat}
               </button>
             ))}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
+        {/* GRILLA VISUAL DE PRODUCTOS/PROMOS CON FOTO */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[580px] overflow-y-auto pr-1">
           {filteredCatalog.map((item) => (
             <div
               key={`${item.isPromo ? 'pr' : 'prod'}-${item.id}`}
               onClick={() => addToCart(item)}
-              className={`border p-3.5 rounded-2xl cursor-pointer transition flex items-center justify-between group hover:scale-[1.01] ${
+              className={`border rounded-2xl overflow-hidden cursor-pointer transition flex flex-col justify-between group hover:scale-[1.02] shadow-lg ${
                 item.isPromo
                   ? 'bg-fuchsia-950/20 border-fuchsia-500/40 hover:border-fuchsia-400'
                   : 'bg-slate-900/80 border-slate-800 hover:border-fuchsia-500/50'
               }`}
             >
-              <div className="space-y-1 flex-1 pr-2">
-                <span className="text-[10px] uppercase font-bold text-slate-500">
-                  {item.isPromo ? '🔥 Combo / Promo' : item.brand}
-                </span>
-                <h3 className="font-semibold text-xs text-slate-100 group-hover:text-fuchsia-400 line-clamp-1">
-                  {item.name}
-                </h3>
-                {item.description && (
-                  <p className="text-[10px] text-fuchsia-300 line-clamp-1">
-                    ✨ {item.description}
-                  </p>
+              {/* IMAGEN DE PRODUCTO / PROMO */}
+              <div className="h-28 bg-slate-950 relative overflow-hidden flex items-center justify-center border-b border-slate-800/80">
+                {item.imageUrl ? (
+                  <img
+                    src={item.imageUrl}
+                    alt={item.name}
+                    className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
+                  />
+                ) : (
+                  <div className="text-slate-700 flex flex-col items-center gap-1">
+                    <ImageIcon className="w-8 h-8 stroke-[1.5]" />
+                    <span className="text-[9px] uppercase font-bold text-slate-600">Sin Foto</span>
+                  </div>
                 )}
-                <div className="font-mono text-sm font-bold text-emerald-400">
-                  {formatCurrency(item.isPromo ? item.price : (item.sellPrice || item.price))}
-                </div>
+                <span className="absolute top-1.5 left-1.5 bg-slate-950/80 backdrop-blur-md px-2 py-0.5 rounded-md text-[9px] font-bold uppercase text-fuchsia-400 border border-slate-800">
+                  {item.isPromo ? '🔥 Promo' : item.brand}
+                </span>
               </div>
 
-              <div className="w-8 h-8 rounded-xl bg-slate-800 group-hover:bg-fuchsia-500 group-hover:text-slate-950 text-slate-300 flex items-center justify-center transition shadow">
-                <Plus className="w-4 h-4 stroke-[3]" />
+              {/* DETALLES Y PRECIO */}
+              <div className="p-2.5 space-y-1 flex-1 flex flex-col justify-between">
+                <div>
+                  <h3 className="font-bold text-xs text-slate-100 group-hover:text-fuchsia-400 line-clamp-1">
+                    {item.name}
+                  </h3>
+                  {item.description && (
+                    <p className="text-[10px] text-slate-400 line-clamp-1">
+                      {item.description}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <span className="font-mono text-xs font-black text-emerald-400">
+                    {formatCurrency(item.isPromo ? item.price : (item.sellPrice || item.price))}
+                  </span>
+                  <div className="w-6 h-6 rounded-lg bg-slate-800 group-hover:bg-fuchsia-500 group-hover:text-slate-950 text-slate-300 flex items-center justify-center transition shadow">
+                    <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                  </div>
+                </div>
               </div>
             </div>
           ))}
