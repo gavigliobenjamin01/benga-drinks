@@ -28,34 +28,33 @@ export default function SalesTab({
   const [selectedCategory, setSelectedCategory] = useState('Todas');
   const [selectedClient, setSelectedClient] = useState('Cliente Casual');
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
+  const [paidEfectivoInput, setPaidEfectivoInput] = useState('');
+  const [paidTransferenciaInput, setPaidTransferenciaInput] = useState('');
   const [address, setAddress] = useState('');
   const [shippingFeeInput, setShippingFeeInput] = useState('');
   const [driverExtraInput, setDriverExtraInput] = useState('');
 
-  // ESTADOS Y REFERENCIAS PARA EL TICKET VISUAL EN FOTO
+  // TICKET VISUAL
   const [ticketModalData, setTicketModalData] = useState(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const ticketRef = useRef(null);
 
-  // OBTENER CATEGORÍAS
+  // CATEGORÍAS
   const categories = useMemo(() => {
     const cats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
     return ['Todas', 'Promos', ...cats];
   }, [products]);
 
-  // FILTRAR CATÁLOGO (BUSCA EN PRODUCTOS Y DENTRO DE LOS COMBOS/PROMOS)
+  // FILTRADO CON BÚSQUEDA DENTRO DE COMBOS
   const filteredCatalog = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
 
-    // Función auxiliar para saber si una promo coincide con la búsqueda
     const promoMatches = (pr) => {
       if (!pr.active) return false;
       if (!term) return true;
 
       const nameMatch = (pr.name || '').toLowerCase().includes(term);
       const descMatch = (pr.description || '').toLowerCase().includes(term);
-
-      // Revisa las bebidas que integran el combo desde el inventario
       const itemsMatch = (pr.items || []).some((item) => {
         const pObj = products.find((p) => p.id === item.productId);
         if (!pObj) return false;
@@ -69,9 +68,7 @@ export default function SalesTab({
     };
 
     if (selectedCategory === 'Promos') {
-      return promos
-        .filter(promoMatches)
-        .map((pr) => ({ ...pr, isPromo: true }));
+      return promos.filter(promoMatches).map((pr) => ({ ...pr, isPromo: true }));
     }
 
     let matchingPromos = [];
@@ -96,6 +93,28 @@ export default function SalesTab({
 
     return [...matchingPromos, ...matchingProducts];
   }, [products, promos, searchTerm, selectedCategory]);
+
+  // CÁLCULOS
+  const shippingFee = parseFloat(shippingFeeInput) || 0;
+  const driverExtra = parseFloat(driverExtraInput) || 0;
+  const itemsTotal = cart.reduce((acc, i) => acc + i.price * i.qty, 0);
+  const cartCostTotal = cart.reduce((acc, i) => acc + i.cost * i.qty, 0);
+  const cartTotal = itemsTotal + shippingFee;
+
+  // HANDLERS PARA AUTO-CALCULAR PAGO MIXTO
+  const handleEfectivoChange = (val) => {
+    setPaidEfectivoInput(val);
+    const num = parseFloat(val) || 0;
+    const remaining = Math.max(0, cartTotal - num);
+    setPaidTransferenciaInput(remaining > 0 ? remaining.toString() : '0');
+  };
+
+  const handleTransferenciaChange = (val) => {
+    setPaidTransferenciaInput(val);
+    const num = parseFloat(val) || 0;
+    const remaining = Math.max(0, cartTotal - num);
+    setPaidEfectivoInput(remaining > 0 ? remaining.toString() : '0');
+  };
 
   // AGREGAR AL CARRITO
   const addToCart = (item) => {
@@ -145,13 +164,6 @@ export default function SalesTab({
     );
   };
 
-  // CÁLCULOS
-  const shippingFee = parseFloat(shippingFeeInput) || 0;
-  const driverExtra = parseFloat(driverExtraInput) || 0;
-  const itemsTotal = cart.reduce((acc, i) => acc + i.price * i.qty, 0);
-  const cartCostTotal = cart.reduce((acc, i) => acc + i.cost * i.qty, 0);
-  const cartTotal = itemsTotal + shippingFee;
-
   // REGISTRAR LA VENTA
   const handleSubmitSale = () => {
     if (cart.length === 0) return;
@@ -161,10 +173,29 @@ export default function SalesTab({
       return;
     }
 
+    let paidEfectivo = 0;
+    let paidTransferencia = 0;
+
+    if (paymentMethod === 'Efectivo') {
+      paidEfectivo = cartTotal;
+    } else if (paymentMethod === 'Transferencia') {
+      paidTransferencia = cartTotal;
+    } else if (paymentMethod === 'Mixto') {
+      paidEfectivo = parseFloat(paidEfectivoInput) || 0;
+      paidTransferencia = parseFloat(paidTransferenciaInput) || 0;
+
+      if (Math.abs((paidEfectivo + paidTransferencia) - cartTotal) > 0.01) {
+        notify(`⚠️ La suma de Efectivo ($${paidEfectivo}) y Transferencia ($${paidTransferencia}) debe dar el total ($${cartTotal})`);
+        return;
+      }
+    }
+
     const salePayload = {
       saleCart: cart,
       selectedClient,
       paymentMethod,
+      paidEfectivo,
+      paidTransferencia,
       address,
       shippingFee,
       driverExtra,
@@ -175,12 +206,14 @@ export default function SalesTab({
         setAddress('');
         setShippingFeeInput('');
         setDriverExtraInput('');
+        setPaidEfectivoInput('');
+        setPaidTransferenciaInput('');
+        setPaymentMethod('Efectivo');
       }
     };
 
     onRegisterSale(salePayload);
 
-    // DATOS PARA GENERAR LA FOTO DEL TICKET
     setTicketModalData({
       ticketId: `V-${Date.now().toString().slice(-4)}`,
       date: new Date().toLocaleDateString('es-AR', {
@@ -192,6 +225,8 @@ export default function SalesTab({
       }),
       client: selectedClient,
       paymentMethod,
+      paidEfectivo,
+      paidTransferencia,
       address,
       items: [...cart],
       shippingFee,
@@ -199,11 +234,10 @@ export default function SalesTab({
     });
   };
 
-  // DESCARGAR TICKET COMO FOTO PNG
+  // DESCARGAR/COMPARTIR FOTO TICKET
   const handleDownloadImage = async () => {
     if (!ticketRef.current) return;
     setIsGeneratingImage(true);
-
     try {
       const dataUrl = await toPng(ticketRef.current, { cacheBust: true, pixelRatio: 2 });
       const link = document.createElement('a');
@@ -218,11 +252,9 @@ export default function SalesTab({
     }
   };
 
-  // COMPARTIR FOTO DIRECTA (EN CELULARES / TABLETS)
   const handleShareImage = async () => {
     if (!ticketRef.current) return;
     setIsGeneratingImage(true);
-
     try {
       const dataUrl = await toPng(ticketRef.current, { cacheBust: true, pixelRatio: 2 });
       const blob = await (await fetch(dataUrl)).blob();
@@ -253,7 +285,7 @@ export default function SalesTab({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-      {/* LADO IZQUIERDO: CATÁLOGO Y BUSCADOR */}
+      {/* LADO IZQUIERDO: CATÁLOGO */}
       <div className="lg:col-span-7 space-y-4">
         <div className="space-y-3">
           <div className="relative">
@@ -326,7 +358,7 @@ export default function SalesTab({
         </div>
       </div>
 
-      {/* LADO DERECHO: TICKET Y REGISTRO DE VENTA */}
+      {/* LADO DERECHO: VENTA Y PAGO */}
       <div className="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl">
         <div className="flex justify-between items-center pb-3 border-b border-slate-800">
           <h2 className="font-bold text-base text-white flex items-center gap-2">
@@ -339,7 +371,7 @@ export default function SalesTab({
           )}
         </div>
 
-        <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
           {cart.length === 0 ? (
             <p className="text-xs text-slate-500 text-center py-8">
               Seleccioná productos o combos de la izquierda para sumar a la venta.
@@ -403,15 +435,57 @@ export default function SalesTab({
               </label>
               <select
                 value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
+                onChange={(e) => {
+                  const mode = e.target.value;
+                  setPaymentMethod(mode);
+                  if (mode === 'Mixto') {
+                    const half = Math.round(cartTotal / 2);
+                    setPaidEfectivoInput(half.toString());
+                    setPaidTransferenciaInput((cartTotal - half).toString());
+                  }
+                }}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-white font-medium focus:outline-none focus:border-fuchsia-500"
               >
                 <option value="Efectivo">💵 Efectivo</option>
                 <option value="Transferencia">💳 Transferencia / MP</option>
+                <option value="Mixto">🔀 Pago Mixto (Efectivo + MP)</option>
                 <option value="Fiado">📝 Fiado (Deuda)</option>
               </select>
             </div>
           </div>
+
+          {/* CAMPOS DE PAGO MIXTO */}
+          {paymentMethod === 'Mixto' && (
+            <div className="bg-slate-950/90 p-3 rounded-2xl border border-fuchsia-500/40 space-y-2 animate-fadeIn">
+              <span className="text-[11px] font-bold text-fuchsia-400 block uppercase">
+                Dividir Pago Mixto (Total: {formatCurrency(cartTotal)})
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Monto en Efectivo ($):</label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="0"
+                    value={paidEfectivoInput}
+                    onChange={(e) => handleEfectivoChange(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2 text-white font-mono text-xs focus:outline-none focus:border-fuchsia-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-1">Monto MP / Transf ($):</label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="0"
+                    value={paidTransferenciaInput}
+                    onChange={(e) => handleTransferenciaChange(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2 text-white font-mono text-xs focus:outline-none focus:border-fuchsia-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="text-slate-400 block mb-1 font-medium flex items-center gap-1">
@@ -466,7 +540,7 @@ export default function SalesTab({
         </div>
       </div>
 
-      {/* MODAL CON EL TICKET VISUAL EN FOTO */}
+      {/* MODAL TICKET FOTO */}
       {ticketModalData && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-5 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -479,28 +553,36 @@ export default function SalesTab({
               </button>
             </div>
 
-            {/* VISTA PREVIA DEL TICKET */}
             <div className="overflow-hidden rounded-2xl shadow-2xl">
               <div
                 ref={ticketRef}
                 className="bg-slate-950 text-slate-100 p-5 font-mono text-xs space-y-4 border border-fuchsia-500/30"
               >
-                {/* ENCABEZADO TICKET */}
                 <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-800">
                   <div className="font-black text-base tracking-wider text-fuchsia-400">BENGA DRINKS</div>
                   <div className="text-[10px] text-slate-400 uppercase">Venta de Bebidas</div>
                   <div className="text-[9px] text-slate-500 pt-1">Ticket #{ticketModalData.ticketId} • {ticketModalData.date}</div>
                 </div>
 
-                {/* DATOS DE LA COMPRA */}
                 <div className="space-y-1 text-[11px] pb-3 border-b border-dashed border-slate-800">
                   <div className="flex justify-between">
                     <span className="text-slate-400">Cliente:</span>
                     <strong className="text-white">{ticketModalData.client}</strong>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-start">
                     <span className="text-slate-400">Pago:</span>
-                    <strong className="text-emerald-400">{ticketModalData.paymentMethod}</strong>
+                    <strong className="text-emerald-400 text-right">
+                      {ticketModalData.paymentMethod === 'Mixto' ? (
+                        <>
+                          <span>Mixto</span>
+                          <span className="block text-[9px] text-slate-300 font-mono">
+                            Efec: {formatCurrency(ticketModalData.paidEfectivo)} | MP: {formatCurrency(ticketModalData.paidTransferencia)}
+                          </span>
+                        </>
+                      ) : (
+                        ticketModalData.paymentMethod
+                      )}
+                    </strong>
                   </div>
                   {ticketModalData.address && (
                     <div className="flex justify-between">
@@ -510,7 +592,6 @@ export default function SalesTab({
                   )}
                 </div>
 
-                {/* PRODUCTOS */}
                 <div className="space-y-2 pb-3 border-b border-dashed border-slate-800">
                   <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Detalle:</span>
                   {ticketModalData.items.map((item, idx) => (
@@ -535,7 +616,6 @@ export default function SalesTab({
                   )}
                 </div>
 
-                {/* TOTAL */}
                 <div className="pt-1 flex justify-between items-center text-sm font-bold">
                   <span className="text-slate-300">TOTAL:</span>
                   <span className="text-fuchsia-400 text-base">{formatCurrency(ticketModalData.total)}</span>
@@ -547,7 +627,6 @@ export default function SalesTab({
               </div>
             </div>
 
-            {/* BOTONES DE DESCARGA Y COMPARTIR */}
             <div className="space-y-2 pt-1">
               <button
                 disabled={isGeneratingImage}

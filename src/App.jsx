@@ -234,6 +234,8 @@ export default function App() {
     saleCart,
     selectedClient,
     paymentMethod,
+    paidEfectivo: customEfectivo = 0,
+    paidTransferencia: customTransferencia = 0,
     address,
     shippingFee = 0,
     driverExtra = 0,
@@ -274,6 +276,18 @@ export default function App() {
       }
     }
 
+    let paidEfectivo = 0;
+    let paidTransferencia = 0;
+
+    if (paymentMethod === 'Efectivo') {
+      paidEfectivo = cartTotal;
+    } else if (paymentMethod === 'Transferencia') {
+      paidTransferencia = cartTotal;
+    } else if (paymentMethod === 'Mixto') {
+      paidEfectivo = customEfectivo;
+      paidTransferencia = customTransferencia;
+    }
+
     const productsRevenue = cartTotal - shippingFee;
     const netProfit = productsRevenue - cartCostTotal - driverExtra;
 
@@ -282,6 +296,8 @@ export default function App() {
       date: new Date().toISOString(),
       client: selectedClient,
       paymentMethod,
+      paidEfectivo,
+      paidTransferencia,
       address: address.trim() || '',
       shippingFee,
       driverExtra,
@@ -305,10 +321,9 @@ export default function App() {
     notify(
       paymentMethod === 'Fiado'
         ? `📝 Venta fiada a ${selectedClient} por ${formatCurrency(cartTotal)}`
-        : `✅ Venta #${newSale.id} registrada correctamente (${newSale.items.length} productos)`
+        : `✅ Venta #${newSale.id} registrada correctamente`
     );
   };
-
   const handleMarkSaleAsPaid = async (saleId, newPaymentMethod) => {
     const saleToPay = sales.find((s) => s.id === saleId);
     if (!saleToPay || saleToPay.paymentMethod !== 'Fiado') return;
