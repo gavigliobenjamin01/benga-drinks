@@ -146,7 +146,7 @@ export default function App() {
     await setDoc(doc(db, 'settings', 'config'), { salaryPercentage: newVal }, { merge: true });
   };
 
-  // MÉTRICAS
+  // MÉTRICAS CON SOPORTE PARA PAGO MIXTO
   const metrics = useMemo(() => {
     const paidSales = sales.filter((s) => s.paymentMethod !== 'Fiado');
 
@@ -165,13 +165,18 @@ export default function App() {
 
     const merchandiseExpenses = merchandiseExpensesEfectivo + merchandiseExpensesTransferencia;
 
-    const rawEfectivoRevenue = paidSales
-      .filter((s) => s.paymentMethod === 'Efectivo')
-      .reduce((acc, s) => acc + s.total, 0);
+    // SUMA CORRECTA SEGÚN MEDIO DE PAGO O PAGO MIXTO
+    const rawEfectivoRevenue = paidSales.reduce((acc, s) => {
+      if (s.paymentMethod === 'Efectivo') return acc + s.total;
+      if (s.paymentMethod === 'Mixto') return acc + (s.paidEfectivo || 0);
+      return acc;
+    }, 0);
 
-    const rawTransferenciaRevenue = paidSales
-      .filter((s) => s.paymentMethod === 'Transferencia')
-      .reduce((acc, s) => acc + s.total, 0);
+    const rawTransferenciaRevenue = paidSales.reduce((acc, s) => {
+      if (s.paymentMethod === 'Transferencia') return acc + s.total;
+      if (s.paymentMethod === 'Mixto') return acc + (s.paidTransferencia || 0);
+      return acc;
+    }, 0);
 
     const efectivoRevenue = rawEfectivoRevenue - merchandiseExpensesEfectivo;
     const transferenciaRevenue = rawTransferenciaRevenue - merchandiseExpensesTransferencia;
