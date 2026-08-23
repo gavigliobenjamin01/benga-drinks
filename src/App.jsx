@@ -35,7 +35,10 @@ import {
   TrendingUp,
   PieChart,
   Sparkles,
-  Calculator
+  Calculator,
+  Bell,
+  ShoppingBag,
+  CheckCircle2
 } from 'lucide-react';
 
 export default function App() {
@@ -46,6 +49,11 @@ export default function App() {
   const [clients, setClients] = useState([]);
   const [stockEntries, setStockEntries] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
+
+  // ESTADO PARA PEDIDOS PROVENIENTES DE LA APP DE CLIENTES
+  const [webOrders, setWebOrders] = useState([]);
+  const [showWebOrdersModal, setShowWebOrdersModal] = useState(false);
+  const [prefilledOrder, setPrefilledOrder] = useState(null);
 
   // CAJAS Y RETIROS
   const [showBoxesModal, setShowBoxesModal] = useState(false);
@@ -84,7 +92,7 @@ export default function App() {
   const [promoDescription, setPromoDescription] = useState('');
   const [selectedProdForPromo, setSelectedProdForPromo] = useState('');
 
-  // FIRESTORE
+  // CONEXIÓN A FIRESTORE EN TIEMPO REAL
   useEffect(() => {
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
       setProducts(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
@@ -116,6 +124,13 @@ export default function App() {
       setWithdrawals(list);
     });
 
+    // ESCUCHAR PEDIDOS QUE LLEGAN DE LA WEB DE CLIENTES
+    const unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
+      const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
+      list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      setWebOrders(list);
+    });
+
     const unsubSettings = onSnapshot(doc(db, 'settings', 'config'), (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
@@ -132,6 +147,7 @@ export default function App() {
       unsubSales();
       unsubStockEntries();
       unsubWithdrawals();
+      unsubOrders();
       unsubSettings();
     };
   }, []);
@@ -146,7 +162,21 @@ export default function App() {
     await setDoc(doc(db, 'settings', 'config'), { salaryPercentage: newVal }, { merge: true });
   };
 
-  // MÉTRICAS CON SOPORTE PARA PAGO MIXTO
+  // ACEPTAR PEDIDO WEB E IMPORTARLO A REGISTRAR VENTA
+  const handleAcceptWebOrder = async (order) => {
+    setPrefilledOrder(order);
+    setActiveTab('sales');
+    setShowWebOrdersModal(false);
+    await deleteDoc(doc(db, 'orders', order.id));
+    notify(`✨ Pedido de ${order.clientName || 'Cliente'} importado a la caja`);
+  };
+
+  const handleRejectWebOrder = async (orderId) => {
+    await deleteDoc(doc(db, 'orders', orderId));
+    notify('🗑️ Pedido cancelado');
+  };
+
+  // MÉTRICAS CON PAGO MIXTO
   const metrics = useMemo(() => {
     const paidSales = sales.filter((s) => s.paymentMethod !== 'Fiado');
 
@@ -165,7 +195,6 @@ export default function App() {
 
     const merchandiseExpenses = merchandiseExpensesEfectivo + merchandiseExpensesTransferencia;
 
-    // SUMA CORRECTA SEGÚN MEDIO DE PAGO O PAGO MIXTO
     const rawEfectivoRevenue = paidSales.reduce((acc, s) => {
       if (s.paymentMethod === 'Efectivo') return acc + s.total;
       if (s.paymentMethod === 'Mixto') return acc + (s.paidEfectivo || 0);
@@ -323,12 +352,14 @@ export default function App() {
 
     await setDoc(doc(db, 'sales', newSale.id), newSale);
     clearCart();
+    setPrefilledOrder(null);
     notify(
       paymentMethod === 'Fiado'
         ? `📝 Venta fiada a ${selectedClient} por ${formatCurrency(cartTotal)}`
         : `✅ Venta #${newSale.id} registrada correctamente`
     );
   };
+
   const handleMarkSaleAsPaid = async (saleId, newPaymentMethod) => {
     const saleToPay = sales.find((s) => s.id === saleId);
     if (!saleToPay || saleToPay.paymentMethod !== 'Fiado') return;
@@ -701,7 +732,18 @@ export default function App() {
   const currentPromoMarginPct = currentPromoCost > 0 ? Math.round((currentPromoProfit / currentPromoCost) * 100) : 0;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row antialiased">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row antialiased relative">
+      {/* BOTÓN FLOTANTE ALERTA DE PEDIDOS WEB PENDIENTES */}
+      {webOrders.length > 0 && (
+        <button
+          onClick={() => setShowWebOrdersModal(true)}
+          className="fixed bottom-6 right-6 z-[90] bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 font-bold px-5 py-3.5 rounded-full shadow-2xl shadow-fuchsia-500/50 flex items-center gap-3 animate-bounce border-2 border-white"
+        >
+          <Bell className="w-6 h-6 fill-slate-950" />
+          <span className="text-sm">¡Tenés {webOrders.length} pedido(s) web!</span>
+        </button>
+      )}
+
       {/* TOAST */}
       {toast && (
         <div className="fixed top-5 right-5 z-[100] bg-fuchsia-500 text-slate-950 px-4 py-3 rounded-2xl font-bold shadow-2xl shadow-fuchsia-500/40 flex items-center gap-2 animate-bounce">
@@ -722,6 +764,7 @@ export default function App() {
             clients={clients}
             onRegisterSale={handleRegisterSale}
             notify={notify}
+            prefilledOrder={prefilledOrder}
           />
         )}
 
@@ -792,6 +835,71 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* MODAL PEDIDOS WEB ENTRANTES */}
+      {showWebOrdersModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="font-bold text-base text-white flex items-center gap-2">
+                  <ShoppingBag className="w-5 h-5 text-fuchsia-400" /> Pedidos Web Entrantes
+                </h3>
+                <p className="text-xs text-slate-400">Solicitudes realizadas por clientes desde la Web</p>
+              </div>
+              <button onClick={() => setShowWebOrdersModal(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {webOrders.length === 0 ? (
+                <p className="text-xs text-slate-500 text-center py-6">No hay pedidos pendientes en este momento.</p>
+              ) : (
+                webOrders.map((ord) => (
+                  <div key={ord.id} className="bg-slate-950 p-4 rounded-2xl border border-fuchsia-500/30 space-y-3">
+                    <div className="flex justify-between items-start text-xs">
+                      <div>
+                        <span className="font-bold text-white text-sm block">{ord.clientName || 'Cliente Web'}</span>
+                        <span className="text-slate-400 text-[11px] block">{ord.address || 'Sin dirección especificada'}</span>
+                        <span className="text-fuchsia-400 text-[10px] font-mono">Pago: {ord.paymentMethod || 'Efectivo'}</span>
+                      </div>
+                      <span className="font-mono text-emerald-400 font-bold text-base">
+                        {formatCurrency(ord.total || 0)}
+                      </span>
+                    </div>
+
+                    <div className="border-t border-slate-800/80 pt-2 space-y-1">
+                      <span className="text-[10px] text-slate-400 uppercase font-bold block">Detalle del Pedido:</span>
+                      {ord.items?.map((it, idx) => (
+                        <div key={idx} className="flex justify-between text-xs text-slate-300">
+                          <span>{it.qty}x {it.name}</span>
+                          <span className="font-mono text-slate-400">{formatCurrency((it.price || 0) * it.qty)}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        onClick={() => handleRejectWebOrder(ord.id)}
+                        className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2.5 rounded-xl text-xs transition"
+                      >
+                        Rechazar
+                      </button>
+                      <button
+                        onClick={() => handleAcceptWebOrder(ord)}
+                        className="flex-1 bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 font-bold py-2.5 rounded-xl text-xs transition shadow-lg shadow-fuchsia-500/20 flex items-center justify-center gap-1.5"
+                      >
+                        <CheckCircle2 className="w-4 h-4" /> Aceptar e Importar a Caja
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL RETIRO */}
       {showWithdrawModal && (
@@ -1344,7 +1452,6 @@ export default function App() {
                 />
               </div>
 
-              {/* CUADRO VERDE DE COSTO Y GANANCIA DE LA PROMO */}
               {promoItems.length > 0 && (
                 <div className="bg-slate-950 p-3.5 rounded-2xl border border-emerald-500/40 space-y-2">
                   <div className="flex justify-between items-center text-xs text-slate-400">
@@ -1472,7 +1579,6 @@ export default function App() {
                 />
               </div>
 
-              {/* CUADRO VERDE DE COSTO Y GANANCIA DE LA PROMO */}
               {promoItems.length > 0 && (
                 <div className="bg-slate-950 p-3.5 rounded-2xl border border-emerald-500/40 space-y-2">
                   <div className="flex justify-between items-center text-xs text-slate-400">

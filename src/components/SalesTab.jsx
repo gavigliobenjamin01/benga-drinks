@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { toPng } from 'html-to-image';
 import {
   Search,
@@ -21,7 +21,8 @@ export default function SalesTab({
   promos = [],
   clients = [],
   onRegisterSale,
-  notify
+  notify,
+  prefilledOrder
 }) {
   const [cart, setCart] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -38,6 +39,28 @@ export default function SalesTab({
   const [ticketModalData, setTicketModalData] = useState(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const ticketRef = useRef(null);
+
+  // AUTO-CARGAR PEDIDO PROVENIENTE DE LA WEB DEL CLIENTE
+  useEffect(() => {
+    if (prefilledOrder) {
+      if (prefilledOrder.items && prefilledOrder.items.length > 0) {
+        setCart(prefilledOrder.items);
+      }
+      if (prefilledOrder.clientName) {
+        setSelectedClient(prefilledOrder.clientName);
+      }
+      if (prefilledOrder.paymentMethod) {
+        setPaymentMethod(prefilledOrder.paymentMethod);
+        if (prefilledOrder.paymentMethod === 'Mixto') {
+          setPaidEfectivoInput((prefilledOrder.paidEfectivo || 0).toString());
+          setPaidTransferenciaInput((prefilledOrder.paidTransferencia || 0).toString());
+        }
+      }
+      if (prefilledOrder.address) {
+        setAddress(prefilledOrder.address);
+      }
+    }
+  }, [prefilledOrder]);
 
   // CATEGORÍAS
   const categories = useMemo(() => {
@@ -101,7 +124,6 @@ export default function SalesTab({
   const cartCostTotal = cart.reduce((acc, i) => acc + i.cost * i.qty, 0);
   const cartTotal = itemsTotal + shippingFee;
 
-  // HANDLERS PARA AUTO-CALCULAR PAGO MIXTO
   const handleEfectivoChange = (val) => {
     setPaidEfectivoInput(val);
     const num = parseFloat(val) || 0;
@@ -116,7 +138,6 @@ export default function SalesTab({
     setPaidEfectivoInput(remaining > 0 ? remaining.toString() : '0');
   };
 
-  // AGREGAR AL CARRITO
   const addToCart = (item) => {
     setCart((prev) => {
       const existing = prev.find((i) => i.id === item.id && i.isPromo === item.isPromo);
@@ -164,7 +185,6 @@ export default function SalesTab({
     );
   };
 
-  // REGISTRAR LA VENTA
   const handleSubmitSale = () => {
     if (cart.length === 0) return;
 
@@ -234,7 +254,6 @@ export default function SalesTab({
     });
   };
 
-  // DESCARGAR/COMPARTIR FOTO TICKET
   const handleDownloadImage = async () => {
     if (!ticketRef.current) return;
     setIsGeneratingImage(true);
@@ -454,7 +473,6 @@ export default function SalesTab({
             </div>
           </div>
 
-          {/* CAMPOS DE PAGO MIXTO */}
           {paymentMethod === 'Mixto' && (
             <div className="bg-slate-950/90 p-3 rounded-2xl border border-fuchsia-500/40 space-y-2 animate-fadeIn">
               <span className="text-[11px] font-bold text-fuchsia-400 block uppercase">
