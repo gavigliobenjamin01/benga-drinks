@@ -396,13 +396,19 @@ export default function SalesTab({
                 {/* IMAGEN DE PRODUCTO / PROMO OPTIMIZADA */}
                 <div className="h-28 bg-slate-950 relative overflow-hidden flex items-center justify-center border-b border-slate-800/80">
                   {item.imageUrl ? (
-                    <img
-                      src={getOptimizedImageUrl(item.imageUrl)}
-                      alt={item.name}
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
-                    />
+<img
+  src={getOptimizedImageUrl(item.imageUrl)}
+  alt={item.name}
+  loading="lazy"
+  decoding="async"
+  crossOrigin="anonymous"
+  onError={(e) => {
+    // Si el optimizador falla, carga tu link original automáticamente
+    e.target.onerror = null; 
+    e.target.src = item.imageUrl;
+  }}
+  className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
+/>
                   ) : (
                     <div className="text-slate-700 flex flex-col items-center gap-1">
                       <ImageIcon className="w-8 h-8 stroke-[1.5]" />
