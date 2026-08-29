@@ -178,7 +178,25 @@ export default function SalesTab({
     setPaidEfectivoInput(remaining > 0 ? remaining.toString() : '0');
   };
 
-  const addToCart = (item) => {
+ const addToCart = (item) => {
+    if (item.isPromo) {
+      if (isPromoOutOfStock(item)) {
+        alert('Este combo no se puede seleccionar porque uno o más productos se encuentran sin stock.');
+        return;
+      }
+    } else {
+      const freshProduct = products.find((p) => p.id === item.id);
+      const currentStock = Number(freshProduct?.stock ?? item.stock ?? 0);
+
+      const existingInCart = cart.find((i) => i.id === item.id && !i.isPromo);
+      const currentQtyInCart = existingInCart ? existingInCart.qty : 0;
+
+      if (currentQtyInCart + 1 > currentStock) {
+        alert(`No podés agregar más unidades. Stock disponible: ${currentStock}`);
+        return;
+      }
+    }
+
     setCart((prev) => {
       const existing = prev.find((i) => i.id === item.id && i.isPromo === item.isPromo);
       if (existing) {
@@ -237,7 +255,18 @@ export default function SalesTab({
         .map((item) => {
           if (item.id === id && (item.type === 'promo') === isPromo) {
             const newQty = item.qty + delta;
-            return newQty <= 0 ? null : { ...item, qty: newQty };
+            if (newQty <= 0) return null;
+
+            if (!isPromo) {
+              const freshProduct = products.find((p) => p.id === id);
+              const currentStock = Number(freshProduct?.stock ?? 0);
+              if (delta > 0 && newQty > currentStock) {
+                alert(`Stock máximo alcanzado. Solo hay ${currentStock} unidades disponibles.`);
+                return item; // Te frena y no deja aumentar
+              }
+            }
+
+            return { ...item, qty: newQty };
           }
           return item;
         })
