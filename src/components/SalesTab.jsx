@@ -118,11 +118,41 @@ export default function SalesTab({
     return [...matchingPromos, ...matchingProducts];
   }, [products, promos, searchTerm, selectedCategory]);
 
+  // 1. DETECTAR SI HAY PROMO EN EL CARRITO
+  const hasPromoInCart = useMemo(() => {
+    return cart.some((item) => item.type === 'promo' || item.isPromo);
+  }, [cart]);
+
+  // 2. APLICAR DESCUENTO P. COMBO DINÁMICAMENTE
+  const processedCart = useMemo(() => {
+    return cart.map((item) => {
+      if (item.type === 'product' || !item.isPromo) {
+        const comboP = Number(item.raw?.comboPrice || item.comboPrice || 0);
+        const normalP = Number(item.raw?.sellPrice || item.raw?.price || item.sellPrice || item.price || 0);
+
+        const isDiscountApplied = hasPromoInCart && comboP > 0;
+        const effectivePrice = isDiscountApplied ? comboP : normalP;
+
+        return {
+          ...item,
+          effectivePrice,
+          normalPrice: normalP,
+          isDiscountApplied
+        };
+      }
+      return {
+        ...item,
+        effectivePrice: Number(item.price || 0),
+        isDiscountApplied: false
+      };
+    });
+  }, [cart, hasPromoInCart]);
+
   // CÁLCULOS
   const shippingFee = parseFloat(shippingFeeInput) || 0;
   const driverExtra = parseFloat(driverExtraInput) || 0;
-  const itemsTotal = cart.reduce((acc, i) => acc + i.price * i.qty, 0);
-  const cartCostTotal = cart.reduce((acc, i) => acc + i.cost * i.qty, 0);
+  const itemsTotal = processedCart.reduce((acc, i) => acc + i.effectivePrice * i.qty, 0);
+  const cartCostTotal = processedCart.reduce((acc, i) => acc + i.cost * i.qty, 0);
   const cartTotal = itemsTotal + shippingFee;
 
   const handleEfectivoChange = (val) => {
@@ -163,6 +193,7 @@ export default function SalesTab({
           id: item.id,
           name: item.name,
           price,
+          comboPrice: item.comboPrice || 0,
           cost,
           qty: 1,
           type: item.isPromo ? 'promo' : 'product',
@@ -187,7 +218,7 @@ export default function SalesTab({
   };
 
   const handleSubmitSale = () => {
-    if (cart.length === 0) return;
+    if (processedCart.length === 0) return;
 
     if (paymentMethod === 'Fiado' && selectedClient === 'Cliente Casual') {
       notify('⚠️ Para fiar, seleccioná un cliente específico de la lista');
@@ -212,7 +243,7 @@ export default function SalesTab({
     }
 
     const salePayload = {
-      saleCart: cart,
+      saleCart: processedCart.map(item => ({ ...item, price: item.effectivePrice })),
       selectedClient,
       paymentMethod,
       paidEfectivo,
@@ -249,7 +280,7 @@ export default function SalesTab({
       paidEfectivo,
       paidTransferencia,
       address,
-      items: [...cart],
+      items: processedCart.map(item => ({ ...item, price: item.effectivePrice })),
       shippingFee,
       total: cartTotal
     });
@@ -338,59 +369,74 @@ export default function SalesTab({
 
         {/* GRILLA VISUAL DE PRODUCTOS/PROMOS CON FOTO */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[580px] overflow-y-auto pr-1">
-          {filteredCatalog.map((item) => (
-            <div
-              key={`${item.isPromo ? 'pr' : 'prod'}-${item.id}`}
-              onClick={() => addToCart(item)}
-              className={`border rounded-2xl overflow-hidden cursor-pointer transition flex flex-col justify-between group hover:scale-[1.02] shadow-lg ${
-                item.isPromo
-                  ? 'bg-fuchsia-950/20 border-fuchsia-500/40 hover:border-fuchsia-400'
-                  : 'bg-slate-900/80 border-slate-800 hover:border-fuchsia-500/50'
-              }`}
-            >
-              {/* IMAGEN DE PRODUCTO / PROMO */}
-              <div className="h-28 bg-slate-950 relative overflow-hidden flex items-center justify-center border-b border-slate-800/80">
-                {item.imageUrl ? (
-                  <img
-                    src={item.imageUrl}
-                    alt={item.name}
-                    className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
-                  />
-                ) : (
-                  <div className="text-slate-700 flex flex-col items-center gap-1">
-                    <ImageIcon className="w-8 h-8 stroke-[1.5]" />
-                    <span className="text-[9px] uppercase font-bold text-slate-600">Sin Foto</span>
-                  </div>
-                )}
-                <span className="absolute top-1.5 left-1.5 bg-slate-950/80 backdrop-blur-md px-2 py-0.5 rounded-md text-[9px] font-bold uppercase text-fuchsia-400 border border-slate-800">
-                  {item.isPromo ? '🔥 Promo' : item.brand}
-                </span>
-              </div>
+          {filteredCatalog.map((item) => {
+            const comboP = Number(item.comboPrice || item.raw?.comboPrice || 0);
+            const isComboEligible = !item.isPromo && hasPromoInCart && comboP > 0;
+            const displayPrice = item.isPromo
+              ? item.price
+              : (isComboEligible ? comboP : (item.sellPrice || item.price));
 
-              {/* DETALLES Y PRECIO */}
-              <div className="p-2.5 space-y-1 flex-1 flex flex-col justify-between">
-                <div>
-                  <h3 className="font-bold text-xs text-slate-100 group-hover:text-fuchsia-400 line-clamp-1">
-                    {item.name}
-                  </h3>
-                  {item.description && (
-                    <p className="text-[10px] text-slate-400 line-clamp-1">
-                      {item.description}
-                    </p>
+            return (
+              <div
+                key={`${item.isPromo ? 'pr' : 'prod'}-${item.id}`}
+                onClick={() => addToCart(item)}
+                className={`border rounded-2xl overflow-hidden cursor-pointer transition flex flex-col justify-between group hover:scale-[1.02] shadow-lg ${
+                  item.isPromo
+                    ? 'bg-fuchsia-950/20 border-fuchsia-500/40 hover:border-fuchsia-400'
+                    : 'bg-slate-900/80 border-slate-800 hover:border-fuchsia-500/50'
+                }`}
+              >
+                {/* IMAGEN DE PRODUCTO / PROMO */}
+                <div className="h-28 bg-slate-950 relative overflow-hidden flex items-center justify-center border-b border-slate-800/80">
+                  {item.imageUrl ? (
+                    <img
+                      src={item.imageUrl}
+                      alt={item.name}
+                      className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
+                    />
+                  ) : (
+                    <div className="text-slate-700 flex flex-col items-center gap-1">
+                      <ImageIcon className="w-8 h-8 stroke-[1.5]" />
+                      <span className="text-[9px] uppercase font-bold text-slate-600">Sin Foto</span>
+                    </div>
                   )}
+                  <span className="absolute top-1.5 left-1.5 bg-slate-950/80 backdrop-blur-md px-2 py-0.5 rounded-md text-[9px] font-bold uppercase text-fuchsia-400 border border-slate-800">
+                    {item.isPromo ? '🔥 Promo' : item.brand}
+                  </span>
                 </div>
 
-                <div className="flex items-center justify-between pt-1">
-                  <span className="font-mono text-xs font-black text-emerald-400">
-                    {formatCurrency(item.isPromo ? item.price : (item.sellPrice || item.price))}
-                  </span>
-                  <div className="w-6 h-6 rounded-lg bg-slate-800 group-hover:bg-fuchsia-500 group-hover:text-slate-950 text-slate-300 flex items-center justify-center transition shadow">
-                    <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                {/* DETALLES Y PRECIO */}
+                <div className="p-2.5 space-y-1 flex-1 flex flex-col justify-between">
+                  <div>
+                    <h3 className="font-bold text-xs text-slate-100 group-hover:text-fuchsia-400 line-clamp-1">
+                      {item.name}
+                    </h3>
+                    {item.description && (
+                      <p className="text-[10px] text-slate-400 line-clamp-1">
+                        {item.description}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <div>
+                      <span className="font-mono text-xs font-black text-emerald-400 block">
+                        {formatCurrency(displayPrice)}
+                      </span>
+                      {isComboEligible && (
+                        <span className="font-mono text-[9px] text-slate-500 line-through">
+                          {formatCurrency(item.sellPrice || item.price)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="w-6 h-6 rounded-lg bg-slate-800 group-hover:bg-fuchsia-500 group-hover:text-slate-950 text-slate-300 flex items-center justify-center transition shadow">
+                      <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {filteredCatalog.length === 0 && (
             <div className="col-span-full bg-slate-900/50 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-xs">
@@ -414,21 +460,35 @@ export default function SalesTab({
         </div>
 
         <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
-          {cart.length === 0 ? (
+          {processedCart.length === 0 ? (
             <p className="text-xs text-slate-500 text-center py-8">
               Seleccioná productos o combos de la izquierda para sumar a la venta.
             </p>
           ) : (
-            cart.map((item) => (
+            processedCart.map((item) => (
               <div
                 key={`${item.id}-${item.type}`}
                 className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80 flex items-center justify-between text-xs"
               >
                 <div className="truncate flex-1 pr-2">
-                  <span className="font-semibold text-slate-100 block truncate">{item.name}</span>
-                  <span className="font-mono text-emerald-400 text-[11px]">
-                    {formatCurrency(item.price * item.qty)}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-slate-100 truncate">{item.name}</span>
+                    {item.isDiscountApplied && (
+                      <span className="text-[9px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.5 rounded border border-amber-500/30">
+                        Combo
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <span className="font-mono text-emerald-400 text-[11px] font-bold">
+                      {formatCurrency(item.effectivePrice * item.qty)}
+                    </span>
+                    {item.isDiscountApplied && (
+                      <span className="font-mono text-[10px] text-slate-500 line-through">
+                        {formatCurrency(item.normalPrice * item.qty)}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800">
@@ -572,7 +632,7 @@ export default function SalesTab({
           </div>
 
           <button
-            disabled={cart.length === 0}
+            disabled={processedCart.length === 0}
             onClick={handleSubmitSale}
             className="w-full bg-fuchsia-500 hover:bg-fuchsia-400 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-bold py-3.5 rounded-2xl transition shadow-lg shadow-fuchsia-500/20 flex items-center justify-center gap-2"
           >
