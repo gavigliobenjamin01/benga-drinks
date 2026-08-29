@@ -178,7 +178,22 @@ export default function SalesTab({
     setPaidEfectivoInput(remaining > 0 ? remaining.toString() : '0');
   };
 
- const addToCart = (item) => {
+ // Lector seguro de stock para evitar que se rompa si el campo está vacío en Firebase
+  const getSafeStock = (val) => {
+    if (val === undefined || val === null || val === '') return 0;
+    const num = parseInt(val, 10);
+    return isNaN(num) ? 0 : num;
+  };
+
+  const isPromoOutOfStock = (promo) => {
+    if (!promo.items || promo.items.length === 0) return false;
+    return promo.items.some((comp) => {
+      const pObj = products.find((p) => p.id === comp.productId);
+      return !pObj || getSafeStock(pObj.stock) < Number(comp.quantity || 1);
+    });
+  };
+
+  const addToCart = (item) => {
     if (item.isPromo) {
       if (isPromoOutOfStock(item)) {
         alert('Este combo no se puede seleccionar porque uno o más productos se encuentran sin stock.');
@@ -186,7 +201,7 @@ export default function SalesTab({
       }
     } else {
       const freshProduct = products.find((p) => p.id === item.id);
-      const currentStock = Number(freshProduct?.stock ?? item.stock ?? 0);
+      const currentStock = getSafeStock(freshProduct?.stock ?? item.stock ?? 0);
 
       const existingInCart = cart.find((i) => i.id === item.id && !i.isPromo);
       const currentQtyInCart = existingInCart ? existingInCart.qty : 0;
