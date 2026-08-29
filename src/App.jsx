@@ -863,7 +863,7 @@ export default function App() {
         )}
       </main>
 
-      {/* MODAL PEDIDOS WEB ENTRANTES */}
+     {/* MODAL PEDIDOS WEB ENTRANTES */}
       {showWebOrdersModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -887,8 +887,16 @@ export default function App() {
                   <div key={ord.id} className="bg-slate-950 p-4 rounded-2xl border border-fuchsia-500/30 space-y-3">
                     <div className="flex justify-between items-start text-xs">
                       <div>
-                        <span className="font-bold text-white text-sm block">{ord.clientName || 'Cliente Web'}</span>
-                        <span className="text-slate-400 text-[11px] block">{ord.address || 'Sin dirección especificada'}</span>
+                        {/* 🚀 AQUÍ INTEGRAMOS EL NOMBRE Y EL NÚMERO DE PEDIDO */}
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-sm">{ord.clientName || 'Cliente Web'}</span>
+                          {ord.orderNumber && (
+                            <span className="font-mono text-xs font-bold text-fuchsia-400 bg-fuchsia-500/10 px-2 py-0.5 rounded-lg border border-fuchsia-500/25">
+                              #{ord.orderNumber}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-slate-400 text-[11px] block mt-0.5">{ord.address || 'Sin dirección especificada'}</span>
                         <span className="text-fuchsia-400 text-[10px] font-mono">Pago: {ord.paymentMethod || 'Efectivo'}</span>
                       </div>
                       <span className="font-mono text-emerald-400 font-bold text-base">
