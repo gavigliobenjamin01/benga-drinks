@@ -71,6 +71,19 @@ export default function SalesTab({
       }
     }
   }, [prefilledOrder]);
+  const getSafeStock = (val) => {
+    if (val === undefined || val === null || val === '') return 0;
+    const num = parseInt(val, 10);
+    return isNaN(num) ? 0 : num;
+  };
+
+  const isPromoOutOfStock = (promo) => {
+    if (!promo.items || promo.items.length === 0) return false;
+    return promo.items.some((comp) => {
+      const pObj = products.find((p) => p.id === comp.productId);
+      return !pObj || getSafeStock(pObj.stock) < Number(comp.quantity || 1);
+    });
+  };
 
   // CATEGORÍAS
   const categories = useMemo(() => {
@@ -448,18 +461,36 @@ export default function SalesTab({
               ? item.price
               : (isComboEligible ? comboP : (item.sellPrice || item.price));
 
+            // Validar stock real (tanto para productos sueltos como promos)
+            const outOfStock = item.isPromo 
+              ? isPromoOutOfStock(item) 
+              : getSafeStock(item.stock) <= 0;
+
             return (
               <div
                 key={`${item.isPromo ? 'pr' : 'prod'}-${item.id}`}
-                onClick={() => addToCart(item)}
-                className={`border rounded-2xl overflow-hidden cursor-pointer transition flex flex-col justify-between group hover:scale-[1.02] shadow-lg ${
-                  item.isPromo
-                    ? 'bg-fuchsia-950/20 border-fuchsia-500/40 hover:border-fuchsia-400'
-                    : 'bg-slate-900/80 border-slate-800 hover:border-fuchsia-500/50'
+                onClick={() => {
+                  if (outOfStock) return;
+                  addToCart(item);
+                }}
+                className={`border rounded-2xl overflow-hidden transition flex flex-col justify-between group shadow-lg relative ${
+                  outOfStock
+                    ? 'bg-slate-950/40 border-slate-800/50 opacity-60 cursor-not-allowed grayscale'
+                    : item.isPromo
+                    ? 'bg-fuchsia-950/20 border-fuchsia-500/40 hover:border-fuchsia-400 cursor-pointer hover:scale-[1.02]'
+                    : 'bg-slate-900/80 border-slate-800 hover:border-fuchsia-500/50 cursor-pointer hover:scale-[1.02]'
                 }`}
               >
-                {/* IMAGEN DE PRODUCTO / PROMO OPTIMIZADA */}
+                {/* IMAGEN DE PRODUCTO / PROMO CON FILTRO DE SIN STOCK */}
                 <div className="h-28 bg-slate-950 relative overflow-hidden flex items-center justify-center border-b border-slate-800/80">
+                  {outOfStock && (
+                    <div className="absolute inset-0 z-20 bg-slate-950/70 backdrop-blur-[2px] flex items-center justify-center">
+                      <span className="bg-slate-900/90 border border-slate-700 text-slate-300 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-xl">
+                        SIN STOCK
+                      </span>
+                    </div>
+                  )}
+
                   {item.imageUrl ? (
                     <img
                       src={getOptimizedImageUrl(item.imageUrl)}
@@ -474,12 +505,12 @@ export default function SalesTab({
                       className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
                     />
                   ) : (
-                    <div className="text-slate-700 flex flex-col items-center gap-1">
+                    <div className="text-700 flex flex-col items-center gap-1">
                       <ImageIcon className="w-8 h-8 stroke-[1.5]" />
                       <span className="text-[9px] uppercase font-bold text-slate-600">Sin Foto</span>
                     </div>
                   )}
-                  <span className="absolute top-1.5 left-1.5 bg-slate-950/80 backdrop-blur-md px-2 py-0.5 rounded-md text-[9px] font-bold uppercase text-fuchsia-400 border border-slate-800">
+                  <span className="absolute top-1.5 left-1.5 bg-slate-950/80 backdrop-blur-md px-2 py-0.5 rounded-md text-[9px] font-bold uppercase text-fuchsia-400 border border-slate-800 z-10">
                     {item.isPromo ? '🔥 Promo' : item.brand}
                   </span>
                 </div>
@@ -499,16 +530,28 @@ export default function SalesTab({
 
                   <div className="flex items-center justify-between pt-1">
                     <div>
-                      <span className="font-mono text-xs font-black text-emerald-400 block">
-                        {formatCurrency(displayPrice)}
-                      </span>
-                      {isComboEligible && (
-                        <span className="font-mono text-[9px] text-slate-500 line-through">
-                          {formatCurrency(item.sellPrice || item.price)}
+                      {outOfStock ? (
+                        <span className="font-mono text-xs font-bold text-slate-500 block">
+                          Sin stock
                         </span>
+                      ) : (
+                        <>
+                          <span className="font-mono text-xs font-black text-emerald-400 block">
+                            {formatCurrency(displayPrice)}
+                          </span>
+                          {isComboEligible && (
+                            <span className="font-mono text-[9px] text-slate-500 line-through">
+                              {formatCurrency(item.sellPrice || item.price)}
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
-                    <div className="w-6 h-6 rounded-lg bg-slate-800 group-hover:bg-fuchsia-500 group-hover:text-slate-950 text-slate-300 flex items-center justify-center transition shadow">
+                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition shadow ${
+                      outOfStock
+                        ? 'bg-slate-800/40 text-slate-600'
+                        : 'bg-slate-800 group-hover:bg-fuchsia-500 group-hover:text-slate-950 text-slate-300'
+                    }`}>
                       <Plus className="w-3.5 h-3.5 stroke-[3]" />
                     </div>
                   </div>
