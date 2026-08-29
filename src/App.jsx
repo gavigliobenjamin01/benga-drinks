@@ -93,14 +93,16 @@ export default function App() {
   const [promoDescription, setPromoDescription] = useState('');
   const [selectedProdForPromo, setSelectedProdForPromo] = useState('');
 
-  // CONEXIÓN A FIRESTORE EN TIEMPO REAL
+ // CONEXIÓN A FIRESTORE EN TIEMPO REAL
   useEffect(() => {
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
-      setProducts(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
+      const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
+      setProducts(list);
     });
 
     const unsubPromos = onSnapshot(collection(db, 'promos'), (snapshot) => {
-      setPromos(snapshot.docs.map((d) => ({ ...d.data(), id: d.id })));
+      const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
+      setPromos(list);
     });
 
     const unsubClients = onSnapshot(collection(db, 'clients'), (snapshot) => {
