@@ -17,6 +17,13 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '../utils';
 
+// 🚀 FUNCIÓN DE OPTIMIZACIÓN DE IMÁGENES AL VUELO
+// Pasa cualquier link (de Postimages u otro) a un formato WebP comprimido de 400px
+const getOptimizedImageUrl = (url) => {
+  if (!url) return '';
+  return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=400&output=webp&q=75`;
+};
+
 export default function SalesTab({
   products = [],
   promos = [],
@@ -118,12 +125,12 @@ export default function SalesTab({
     return [...matchingPromos, ...matchingProducts];
   }, [products, promos, searchTerm, selectedCategory]);
 
-  // 1. DETECTAR SI HAY PROMO EN EL CARRITO
+  // DETECTAR SI HAY PROMO EN EL CARRITO
   const hasPromoInCart = useMemo(() => {
     return cart.some((item) => item.type === 'promo' || item.isPromo);
   }, [cart]);
 
-  // 2. APLICAR DESCUENTO P. COMBO DINÁMICAMENTE
+  // APLICAR DESCUENTO P. COMBO DINÁMICAMENTE
   const processedCart = useMemo(() => {
     return cart.map((item) => {
       if (item.type === 'product' || !item.isPromo) {
@@ -386,12 +393,14 @@ export default function SalesTab({
                     : 'bg-slate-900/80 border-slate-800 hover:border-fuchsia-500/50'
                 }`}
               >
-                {/* IMAGEN DE PRODUCTO / PROMO */}
+                {/* IMAGEN DE PRODUCTO / PROMO OPTIMIZADA */}
                 <div className="h-28 bg-slate-950 relative overflow-hidden flex items-center justify-center border-b border-slate-800/80">
                   {item.imageUrl ? (
                     <img
-                      src={item.imageUrl}
+                      src={getOptimizedImageUrl(item.imageUrl)}
                       alt={item.name}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
                     />
                   ) : (
