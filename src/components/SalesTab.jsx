@@ -42,6 +42,9 @@ export default function SalesTab({
   const [shippingFeeInput, setShippingFeeInput] = useState('');
   const [driverExtraInput, setDriverExtraInput] = useState('');
 
+  // 🧊 ESTADO PARA LA MINI PESTAÑITA DE SELECCIÓN DE HIELO
+  const [showIceSelector, setShowIceSelector] = useState(false);
+
   // TICKET VISUAL
   const [ticketModalData, setTicketModalData] = useState(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
@@ -209,9 +212,8 @@ export default function SalesTab({
     });
   };
 
-  // 🚀 FUNCIÓN DE AGREGADO RÁPIDO (UPSELL)
+  // 🚀 FUNCIÓN DE AGREGADO RÁPIDO (UPSELL) PARA VASO
   const handleAddSuggested = (keywords) => {
-    // Busca el primer producto en tu inventario que coincida con las palabras clave
     const foundProduct = products.find(p =>
       keywords.some(kw => (p.name || '').toLowerCase().includes(kw))
     );
@@ -223,6 +225,11 @@ export default function SalesTab({
       notify(`⚠️ No se encontró "${keywords[0]}" en el catálogo`);
     }
   };
+
+  // 🧊 LISTA DE HIELOS DISPONIBLES EN TU INVENTARIO PARA LA MINI PESTAÑA
+  const iceOptions = useMemo(() => {
+    return products.filter(p => (p.name || '').toLowerCase().includes('hielo') || (p.category || '').toLowerCase().includes('hielo'));
+  }, [products]);
 
   const updateQty = (id, isPromo, delta) => {
     setCart((prev) =>
@@ -356,7 +363,7 @@ export default function SalesTab({
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start relative">
       {/* LADO IZQUIERDO: CATÁLOGO DE TARJETAS VISUALES */}
       <div className="lg:col-span-7 space-y-4">
         <div className="space-y-3">
@@ -475,7 +482,7 @@ export default function SalesTab({
       </div>
 
       {/* LADO DERECHO: VENTA Y PAGO */}
-      <div className="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl">
+      <div className="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl relative">
         <div className="flex justify-between items-center pb-3 border-b border-slate-800">
           <h2 className="font-bold text-base text-white flex items-center gap-2">
             <ShoppingBag className="w-5 h-5 text-fuchsia-400" /> Venta Actual
@@ -652,35 +659,64 @@ export default function SalesTab({
             </div>
           </div>
 
-          {/* 🚀 NUEVA SECCIÓN: SUGERIDOS RÁPIDOS (UPSELL) */}
-          <div className="pt-3 border-t border-slate-800 space-y-2">
+          {/* 🚀 NUEVA SECCIÓN: SUGERIDOS RÁPIDOS (HIELO CON DESPLEGABLE + VASO) */}
+          <div className="pt-3 border-t border-slate-800 space-y-2 relative">
             <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Sugeridos Rápidos (Upsell)
             </span>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                onClick={() => handleAddSuggested(['hielo'])}
-                className="bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded-xl py-2 flex flex-col items-center justify-center gap-1 transition"
-                title="Agregar Hielo"
-              >
-                <span className="text-base">🧊</span>
-                <span className="text-[10px] font-bold">Hielo</span>
-              </button>
+            <div className="grid grid-cols-2 gap-2 relative">
+              
+              {/* BOTÓN HIELO CON DESPLEGABLE */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowIceSelector(!showIceSelector)}
+                  className="w-full bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded-xl py-2 flex flex-col items-center justify-center gap-1 transition"
+                  title="Seleccionar Hielo"
+                >
+                  <span className="text-base">🧊</span>
+                  <span className="text-[10px] font-bold">Hielo (Elegir)</span>
+                </button>
+
+                {/* MINI PESTAÑITA FLOTANTE PARA ELEGIR EL TIPO DE HIELO */}
+                {showIceSelector && (
+                  <div className="absolute bottom-full left-0 mb-2 w-52 bg-slate-950 border border-sky-500/50 rounded-2xl p-2 shadow-2xl z-50 space-y-1.5 backdrop-blur-md animate-fadeIn">
+                    <div className="flex justify-between items-center px-1 pb-1 border-b border-slate-800">
+                      <span className="text-[10px] font-bold text-sky-400 uppercase">Elegí el tipo de Hielo:</span>
+                      <button onClick={() => setShowIceSelector(false)} className="text-slate-400 hover:text-white">
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {iceOptions.length === 0 ? (
+                      <p className="text-[10px] text-slate-500 text-center py-2">No hay hielos cargados en el inventario.</p>
+                    ) : (
+                      iceOptions.map((ice) => (
+                        <button
+                          key={ice.id}
+                          onClick={() => {
+                            addToCart({ ...ice, isPromo: false });
+                            setShowIceSelector(false);
+                            notify(`🧊 ${ice.name} sumado al pedido`);
+                          }}
+                          className="w-full text-left bg-slate-900 hover:bg-sky-500/20 border border-slate-800 hover:border-sky-500/40 p-2 rounded-xl transition flex justify-between items-center text-xs"
+                        >
+                          <span className="font-medium text-slate-200 truncate pr-1">{ice.name}</span>
+                          <span className="font-mono text-emerald-400 font-bold whitespace-nowrap">{formatCurrency(ice.sellPrice || ice.price)}</span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* BOTÓN VASO 1L DIRECTO */}
               <button
                 onClick={() => handleAddSuggested(['vaso'])}
                 className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-xl py-2 flex flex-col items-center justify-center gap-1 transition"
-                title="Agregar Vaso"
+                title="Agregar Vaso 1L"
               >
                 <span className="text-base">🥤</span>
                 <span className="text-[10px] font-bold">Vaso 1L</span>
-              </button>
-              <button
-                onClick={() => handleAddSuggested(['limón', 'limon', 'jugo', 'speed', 'coca'])}
-                className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl py-2 flex flex-col items-center justify-center gap-1 transition"
-                title="Agregar Extra"
-              >
-                <span className="text-base">🍋</span>
-                <span className="text-[10px] font-bold">Agregado</span>
               </button>
             </div>
           </div>
@@ -787,7 +823,7 @@ export default function SalesTab({
                 <div className="text-center text-[9px] text-slate-500 pt-2 border-t border-dashed border-slate-800">
                   ¡Muchas gracias por tu preferencia! ✨
                 </div>
-        G      </div>
+              </div>
             </div>
 
             <div className="space-y-2 pt-1">
