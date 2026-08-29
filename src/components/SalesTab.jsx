@@ -226,7 +226,7 @@ export default function SalesTab({
     }
   };
 
-  // 🧊 LISTA DE HIELOS DISPONIBLES EN TU INVENTARIO PARA LA MINI PESTAÑA
+  // 🧊 LISTA DE HIELOS DISPONIBLES EN TU INVENTARIO
   const iceOptions = useMemo(() => {
     return products.filter(p => (p.name || '').toLowerCase().includes('hielo') || (p.category || '').toLowerCase().includes('hielo'));
   }, [products]);
@@ -659,7 +659,7 @@ export default function SalesTab({
             </div>
           </div>
 
-          {/* 🚀 NUEVA SECCIÓN: SUGERIDOS RÁPIDOS (HIELO CON DESPLEGABLE + VASO) */}
+          {/* 🚀 NUEVA SECCIÓN: SUGERIDOS RÁPIDOS (HIELO CON PRECIOS DINÁMICOS DE COMBO) */}
           <div className="pt-3 border-t border-slate-800 space-y-2 relative">
             <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Sugeridos Rápidos (Upsell)
@@ -677,9 +677,9 @@ export default function SalesTab({
                   <span className="text-[10px] font-bold">Hielo (Elegir)</span>
                 </button>
 
-                {/* MINI PESTAÑITA FLOTANTE PARA ELEGIR EL TIPO DE HIELO */}
+                {/* MINI PESTAÑITA FLOTANTE CON PRECIOS TACHADOS SI HAY COMBO */}
                 {showIceSelector && (
-                  <div className="absolute bottom-full left-0 mb-2 w-52 bg-slate-950 border border-sky-500/50 rounded-2xl p-2 shadow-2xl z-50 space-y-1.5 backdrop-blur-md animate-fadeIn">
+                  <div className="absolute bottom-full left-0 mb-2 w-56 bg-slate-950 border border-sky-500/50 rounded-2xl p-2.5 shadow-2xl z-50 space-y-2 backdrop-blur-md animate-fadeIn">
                     <div className="flex justify-between items-center px-1 pb-1 border-b border-slate-800">
                       <span className="text-[10px] font-bold text-sky-400 uppercase">Elegí el tipo de Hielo:</span>
                       <button onClick={() => setShowIceSelector(false)} className="text-slate-400 hover:text-white">
@@ -690,20 +690,36 @@ export default function SalesTab({
                     {iceOptions.length === 0 ? (
                       <p className="text-[10px] text-slate-500 text-center py-2">No hay hielos cargados en el inventario.</p>
                     ) : (
-                      iceOptions.map((ice) => (
-                        <button
-                          key={ice.id}
-                          onClick={() => {
-                            addToCart({ ...ice, isPromo: false });
-                            setShowIceSelector(false);
-                            notify(`🧊 ${ice.name} sumado al pedido`);
-                          }}
-                          className="w-full text-left bg-slate-900 hover:bg-sky-500/20 border border-slate-800 hover:border-sky-500/40 p-2 rounded-xl transition flex justify-between items-center text-xs"
-                        >
-                          <span className="font-medium text-slate-200 truncate pr-1">{ice.name}</span>
-                          <span className="font-mono text-emerald-400 font-bold whitespace-nowrap">{formatCurrency(ice.sellPrice || ice.price)}</span>
-                        </button>
-                      ))
+                      iceOptions.map((ice) => {
+                        const comboP = Number(ice.comboPrice || 0);
+                        const normalP = Number(ice.sellPrice || ice.price || 0);
+                        const isComboEligible = hasPromoInCart && comboP > 0;
+                        const finalIcePrice = isComboEligible ? comboP : normalP;
+
+                        return (
+                          <button
+                            key={ice.id}
+                            onClick={() => {
+                              addToCart({ ...ice, isPromo: false });
+                              setShowIceSelector(false);
+                              notify(`🧊 ${ice.name} sumado al pedido`);
+                            }}
+                            className="w-full text-left bg-slate-900 hover:bg-sky-500/20 border border-slate-800 hover:border-sky-500/40 p-2 rounded-xl transition flex justify-between items-center text-xs"
+                          >
+                            <span className="font-medium text-slate-200 truncate pr-1">{ice.name}</span>
+                            <div className="text-right whitespace-nowrap">
+                              <span className="font-mono text-emerald-400 font-bold block">
+                                {formatCurrency(finalIcePrice)}
+                              </span>
+                              {isComboEligible && (
+                                <span className="font-mono text-[9px] text-slate-500 line-through block">
+                                  {formatCurrency(normalP)}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                 )}
