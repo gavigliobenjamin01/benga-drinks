@@ -18,7 +18,6 @@ import {
 import { formatCurrency } from '../utils';
 
 // 🚀 FUNCIÓN DE OPTIMIZACIÓN DE IMÁGENES AL VUELO
-// Pasa cualquier link (de Postimages u otro) a un formato WebP comprimido de 400px
 const getOptimizedImageUrl = (url) => {
   if (!url) return '';
   return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=400&output=webp&q=75`;
@@ -48,7 +47,7 @@ export default function SalesTab({
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const ticketRef = useRef(null);
 
-  // AUTO-CARGAR PEDIDO PROVENIENTE DE LA WEB DEL CLIENTE
+  // AUTO-CARGAR PEDIDO PROVENIENTE DE LA WEB DEL CLIENTE O DE REABRIR VENTA
   useEffect(() => {
     if (prefilledOrder) {
       if (prefilledOrder.items && prefilledOrder.items.length > 0) {
@@ -208,6 +207,21 @@ export default function SalesTab({
         }
       ];
     });
+  };
+
+  // 🚀 FUNCIÓN DE AGREGADO RÁPIDO (UPSELL)
+  const handleAddSuggested = (keywords) => {
+    // Busca el primer producto en tu inventario que coincida con las palabras clave
+    const foundProduct = products.find(p =>
+      keywords.some(kw => (p.name || '').toLowerCase().includes(kw))
+    );
+
+    if (foundProduct) {
+      addToCart({ ...foundProduct, isPromo: false });
+      notify(`✨ ${foundProduct.name} sumado al pedido`);
+    } else {
+      notify(`⚠️ No se encontró "${keywords[0]}" en el catálogo`);
+    }
   };
 
   const updateQty = (id, isPromo, delta) => {
@@ -396,19 +410,18 @@ export default function SalesTab({
                 {/* IMAGEN DE PRODUCTO / PROMO OPTIMIZADA */}
                 <div className="h-28 bg-slate-950 relative overflow-hidden flex items-center justify-center border-b border-slate-800/80">
                   {item.imageUrl ? (
-<img
-  src={getOptimizedImageUrl(item.imageUrl)}
-  alt={item.name}
-  loading="lazy"
-  decoding="async"
-  crossOrigin="anonymous"
-  onError={(e) => {
-    // Si el optimizador falla, carga tu link original automáticamente
-    e.target.onerror = null; 
-    e.target.src = item.imageUrl;
-  }}
-  className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
-/>
+                    <img
+                      src={getOptimizedImageUrl(item.imageUrl)}
+                      alt={item.name}
+                      loading="lazy"
+                      decoding="async"
+                      crossOrigin="anonymous"
+                      onError={(e) => {
+                        e.target.onerror = null; 
+                        e.target.src = item.imageUrl;
+                      }}
+                      className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
+                    />
                   ) : (
                     <div className="text-slate-700 flex flex-col items-center gap-1">
                       <ImageIcon className="w-8 h-8 stroke-[1.5]" />
@@ -639,7 +652,41 @@ export default function SalesTab({
             </div>
           </div>
 
-          <div className="pt-2 flex items-center justify-between">
+          {/* 🚀 NUEVA SECCIÓN: SUGERIDOS RÁPIDOS (UPSELL) */}
+          <div className="pt-3 border-t border-slate-800 space-y-2">
+            <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Sugeridos Rápidos (Upsell)
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => handleAddSuggested(['hielo'])}
+                className="bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 rounded-xl py-2 flex flex-col items-center justify-center gap-1 transition"
+                title="Agregar Hielo"
+              >
+                <span className="text-base">🧊</span>
+                <span className="text-[10px] font-bold">Hielo</span>
+              </button>
+              <button
+                onClick={() => handleAddSuggested(['vaso'])}
+                className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-xl py-2 flex flex-col items-center justify-center gap-1 transition"
+                title="Agregar Vaso"
+              >
+                <span className="text-base">🥤</span>
+                <span className="text-[10px] font-bold">Vaso 1L</span>
+              </button>
+              <button
+                onClick={() => handleAddSuggested(['limón', 'limon', 'jugo', 'speed', 'coca'])}
+                className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl py-2 flex flex-col items-center justify-center gap-1 transition"
+                title="Agregar Extra"
+              >
+                <span className="text-base">🍋</span>
+                <span className="text-[10px] font-bold">Agregado</span>
+              </button>
+            </div>
+          </div>
+          {/* FIN NUEVA SECCIÓN */}
+
+          <div className="pt-2 flex items-center justify-between border-t border-slate-800 mt-3">
             <span className="text-xs text-slate-400 uppercase font-bold">Total a Cobrar:</span>
             <span className="font-mono text-2xl font-bold text-fuchsia-400">
               {formatCurrency(cartTotal)}
@@ -740,7 +787,7 @@ export default function SalesTab({
                 <div className="text-center text-[9px] text-slate-500 pt-2 border-t border-dashed border-slate-800">
                   ¡Muchas gracias por tu preferencia! ✨
                 </div>
-              </div>
+        G      </div>
             </div>
 
             <div className="space-y-2 pt-1">
