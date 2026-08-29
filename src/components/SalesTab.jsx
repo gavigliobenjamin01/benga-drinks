@@ -71,6 +71,8 @@ export default function SalesTab({
       }
     }
   }, [prefilledOrder]);
+
+  // 🛡️ LECTOR SEGURO DE STOCK Y VALIDACIÓN DE PROMOS (Única fuente de verdad)
   const getSafeStock = (val) => {
     if (val === undefined || val === null || val === '') return 0;
     const num = parseInt(val, 10);
@@ -191,21 +193,6 @@ export default function SalesTab({
     setPaidEfectivoInput(remaining > 0 ? remaining.toString() : '0');
   };
 
- // Lector seguro de stock para evitar que se rompa si el campo está vacío en Firebase
-  const getSafeStock = (val) => {
-    if (val === undefined || val === null || val === '') return 0;
-    const num = parseInt(val, 10);
-    return isNaN(num) ? 0 : num;
-  };
-
-  const isPromoOutOfStock = (promo) => {
-    if (!promo.items || promo.items.length === 0) return false;
-    return promo.items.some((comp) => {
-      const pObj = products.find((p) => p.id === comp.productId);
-      return !pObj || getSafeStock(pObj.stock) < Number(comp.quantity || 1);
-    });
-  };
-
   const addToCart = (item) => {
     if (item.isPromo) {
       if (isPromoOutOfStock(item)) {
@@ -290,7 +277,7 @@ export default function SalesTab({
               const currentStock = Number(freshProduct?.stock ?? 0);
               if (delta > 0 && newQty > currentStock) {
                 alert(`Stock máximo alcanzado. Solo hay ${currentStock} unidades disponibles.`);
-                return item; // Te frena y no deja aumentar
+                return item;
               }
             }
 
@@ -505,7 +492,7 @@ export default function SalesTab({
                       className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
                     />
                   ) : (
-                    <div className="text-700 flex flex-col items-center gap-1">
+                    <div className="text-slate-700 flex flex-col items-center gap-1">
                       <ImageIcon className="w-8 h-8 stroke-[1.5]" />
                       <span className="text-[9px] uppercase font-bold text-slate-600">Sin Foto</span>
                     </div>
@@ -919,7 +906,7 @@ export default function SalesTab({
                 </div>
 
                 <div className="pt-1 flex justify-between items-center text-sm font-bold">
-                  <span className="text-slate-300">TOTAL:</span>
+                  <span className="text-300">TOTAL:</span>
                   <span className="text-fuchsia-400 text-base">{formatCurrency(ticketModalData.total)}</span>
                 </div>
 
