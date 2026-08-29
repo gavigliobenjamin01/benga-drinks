@@ -783,6 +783,26 @@ export default function App() {
             setShowBoxesModal={setShowBoxesModal}
             setSaleToPayModal={setSaleToPayModal}
             setSaleToDeleteConfirm={setSaleToDeleteConfirm}
+            onReopenSale={(sale) => {
+              // 1. Cargamos el ticket en la caja
+              setPrefilledOrder({
+                items: sale.items,
+                clientName: sale.client,
+                paymentMethod: sale.paymentMethod,
+                address: sale.address,
+                paidEfectivo: sale.paidEfectivo,
+                paidTransferencia: sale.paidTransferencia,
+              });
+              
+              // 2. Borramos la venta original de la base de datos y devolvemos el stock temporalmente
+              handleDeleteSale(sale.id); 
+              
+              // 3. Cambiamos a la pestaña de ventas
+              setActiveTab('sales'); 
+              
+              // 4. Avisamos al usuario
+              notify('✏️ Venta reabierta. Podés modificarla y volver a registrarla.');
+            }}
           />
         )}
 

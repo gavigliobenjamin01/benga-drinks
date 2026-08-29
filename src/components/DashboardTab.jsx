@@ -7,7 +7,8 @@ import {
   CreditCard,
   Trash2,
   History,
-  MapPin
+  MapPin,
+  Edit // <-- Importamos el ícono de edición
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../utils';
 
@@ -19,7 +20,8 @@ export default function DashboardTab({
   setShowWithdrawModal,
   setShowBoxesModal,
   setSaleToPayModal,
-  setSaleToDeleteConfirm
+  setSaleToDeleteConfirm,
+  onReopenSale // <-- Recibimos la función desde App.jsx
 }) {
   return (
     <div className="space-y-6">
@@ -202,6 +204,15 @@ export default function DashboardTab({
                         <CreditCard className="w-3.5 h-3.5" /> Cobrar
                       </button>
                     )}
+
+                    {/* BOTÓN EDITAR / REABRIR VENTA */}
+                    <button
+                      onClick={() => onReopenSale && onReopenSale(sale)}
+                      className="p-2 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 rounded-xl transition"
+                      title="Editar / Reabrir venta en la Caja"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
 
                     <button
                       onClick={() => setSaleToDeleteConfirm(sale)}
