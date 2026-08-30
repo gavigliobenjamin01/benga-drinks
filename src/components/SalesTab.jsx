@@ -239,6 +239,7 @@ export default function SalesTab({
           cost,
           qty: 1,
           type: item.isPromo ? 'promo' : 'product',
+          items: item.items || item.raw?.items || [], // 👈 Guardamos los componentes para el tooltip
           raw: item
         }
       ];
@@ -577,11 +578,28 @@ export default function SalesTab({
             processedCart.map((item) => (
               <div
                 key={`${item.id}-${item.type}`}
-                className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80 flex items-center justify-between text-xs"
+                className="relative group bg-slate-950 p-3 rounded-2xl border border-slate-800/80 flex items-center justify-between text-xs"
               >
-                <div className="truncate flex-1 pr-2">
+                {/* 🚀 TOOLTIP FLOTANTE AL PASAR EL MOUSE O TOCAR EN CELULAR */}
+                {item.items && item.items.length > 0 && (
+                  <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block group-focus-within:block bg-slate-900 border border-fuchsia-500/50 text-white text-xs rounded-xl p-2.5 shadow-2xl z-50 whitespace-nowrap backdrop-blur-md">
+                    <p className="text-[10px] text-fuchsia-400 font-bold uppercase mb-1">Contiene:</p>
+                    {item.items.map((subItem, idx) => (
+                      <div key={idx} className="text-slate-200">
+                        • {subItem.quantity || 1}x {subItem.name || subItem.productId}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="truncate flex-1 pr-2 cursor-pointer">
                   <div className="flex items-center gap-1.5">
                     <span className="font-semibold text-slate-100 truncate">{item.name}</span>
+                    {item.items && item.items.length > 0 && (
+                      <span className="text-[9px] bg-fuchsia-500/20 text-fuchsia-400 px-1.5 py-0.5 rounded border border-fuchsia-500/30">
+                        Ver combo
+                      </span>
+                    )}
                     {item.isDiscountApplied && (
                       <span className="text-[9px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.5 rounded border border-amber-500/30">
                         Combo
@@ -733,14 +751,12 @@ export default function SalesTab({
             </div>
           </div>
 
-          {/* 🚀 NUEVA SECCIÓN: SUGERIDOS RÁPIDOS (HIELO CON PRECIOS DINÁMICOS DE COMBO) */}
+          {/* SUGERIDOS RÁPIDOS (UPSELL) */}
           <div className="pt-3 border-t border-slate-800 space-y-2 relative">
             <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Sugeridos Rápidos (Upsell)
             </span>
             <div className="grid grid-cols-2 gap-2 relative">
-              
-              {/* BOTÓN HIELO CON DESPLEGABLE */}
               <div className="relative">
                 <button
                   onClick={() => setShowIceSelector(!showIceSelector)}
@@ -751,7 +767,6 @@ export default function SalesTab({
                   <span className="text-[10px] font-bold">Hielo (Elegir)</span>
                 </button>
 
-                {/* MINI PESTAÑITA FLOTANTE CON PRECIOS TACHADOS SI HAY COMBO */}
                 {showIceSelector && (
                   <div className="absolute bottom-full left-0 mb-2 w-56 bg-slate-950 border border-sky-500/50 rounded-2xl p-2.5 shadow-2xl z-50 space-y-2 backdrop-blur-md animate-fadeIn">
                     <div className="flex justify-between items-center px-1 pb-1 border-b border-slate-800">
@@ -799,7 +814,6 @@ export default function SalesTab({
                 )}
               </div>
 
-              {/* BOTÓN VASO 1L DIRECTO */}
               <button
                 onClick={() => handleAddSuggested(['vaso'])}
                 className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-xl py-2 flex flex-col items-center justify-center gap-1 transition"
@@ -810,7 +824,6 @@ export default function SalesTab({
               </button>
             </div>
           </div>
-          {/* FIN NUEVA SECCIÓN */}
 
           <div className="pt-2 flex items-center justify-between border-t border-slate-800 mt-3">
             <span className="text-xs text-slate-400 uppercase font-bold">Total a Cobrar:</span>
@@ -906,7 +919,7 @@ export default function SalesTab({
                 </div>
 
                 <div className="pt-1 flex justify-between items-center text-sm font-bold">
-                  <span className="text-300">TOTAL:</span>
+                  <span className="text-slate-300">TOTAL:</span>
                   <span className="text-fuchsia-400 text-base">{formatCurrency(ticketModalData.total)}</span>
                 </div>
 
