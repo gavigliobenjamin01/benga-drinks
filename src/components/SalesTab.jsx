@@ -297,7 +297,22 @@ export default function SalesTab({
     );
   };
 
-  const handleSubmitSale = () => {
+// 🚀 NÚMERO DE TICKET CENTRALIZADO EN FIREBASE (Para todos los dispositivos)
+  const getNextTicketNumber = async () => {
+    const counterRef = doc(db, 'counters', 'ticketCounter');
+    const counterSnap = await getDoc(counterRef);
+
+    if (!counterSnap.exists()) {
+      await setDoc(counterRef, { current: 19 });
+      return 20;
+    } else {
+      await updateDoc(counterRef, { current: increment(1) });
+      const updatedSnap = await getDoc(counterRef);
+      return updatedSnap.data().current;
+    }
+  };
+
+  const handleSubmitSale = async () => {
     if (processedCart.length === 0) return;
 
     if (paymentMethod === 'Fiado' && selectedClient === 'Cliente Casual') {
@@ -322,53 +337,56 @@ export default function SalesTab({
       }
     }
 
-    // 🚀 CONTADOR DE TICKET SEGURO (Arranca en 19 para que el próximo sea el 20)
-    const lastTicketNum = parseInt(localStorage.getItem('benga_last_ticket_num') || '19', 10);
-    const nextTicketNum = lastTicketNum + 1;
-    localStorage.setItem('benga_last_ticket_num', nextTicketNum.toString());
+    try {
+      // 🚀 Obtenemos el número correlativo directamente desde la nube de Firebase
+      const nextTicketNum = await getNextTicketNumber();
 
-    const salePayload = {
-      saleCart: processedCart.map(item => ({ ...item, price: item.effectivePrice })),
-      selectedClient,
-      paymentMethod,
-      paidEfectivo,
-      paidTransferencia,
-      address,
-      shippingFee,
-      driverExtra,
-      cartTotal,
-      cartCostTotal,
-      clearCart: () => {
-        setCart([]);
-        setAddress('');
-        setShippingFeeInput('');
-        setDriverExtraInput('');
-        setPaidEfectivoInput('');
-        setPaidTransferenciaInput('');
-        setPaymentMethod('Efectivo');
-      }
-    };
+      const salePayload = {
+        saleCart: processedCart.map(item => ({ ...item, price: item.effectivePrice })),
+        selectedClient,
+        paymentMethod,
+        paidEfectivo,
+        paidTransferencia,
+        address,
+        shippingFee,
+        driverExtra,
+        cartTotal,
+        cartCostTotal,
+        clearCart: () => {
+          setCart([]);
+          setAddress('');
+          setShippingFeeInput('');
+          setDriverExtraInput('');
+          setPaidEfectivoInput('');
+          setPaidTransferenciaInput('');
+          setPaymentMethod('Efectivo');
+        }
+      };
 
-    onRegisterSale(salePayload);
+      onRegisterSale(salePayload);
 
-    setTicketModalData({
-      ticketId: `V-${nextTicketNum}`,
-      date: new Date().toLocaleDateString('es-AR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      }),
-      client: selectedClient,
-      paymentMethod,
-      paidEfectivo,
-      paidTransferencia,
-      address,
-      items: processedCart.map(item => ({ ...item, price: item.effectivePrice })),
-      shippingFee,
-      total: cartTotal
-    });
+      setTicketModalData({
+        ticketId: `V-${nextTicketNum}`,
+        date: new Date().toLocaleDateString('es-AR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        client: selectedClient,
+        paymentMethod,
+        paidEfectivo,
+        paidTransferencia,
+        address,
+        items: processedCart.map(item => ({ ...item, price: item.effectivePrice })),
+        shippingFee,
+        total: cartTotal
+      });
+    } catch (err) {
+      console.error(err);
+      notify('⚠️ Error al generar el número de ticket en la base de datos');
+    }
   };
 
   const handleDownloadImage = async () => {
