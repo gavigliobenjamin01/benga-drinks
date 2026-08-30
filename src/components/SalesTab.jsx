@@ -13,7 +13,9 @@ import {
   UserCheck,
   DollarSign,
   Receipt,
-  Image as ImageIcon
+  Image as ImageIcon,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { formatCurrency } from '../utils';
 
@@ -44,6 +46,9 @@ export default function SalesTab({
 
   // 🧊 ESTADO PARA LA MINI PESTAÑITA DE SELECCIÓN DE HIELO
   const [showIceSelector, setShowIceSelector] = useState(false);
+
+  // 🚀 ESTADO PARA CONTROLAR QUÉ COMBOS TIENEN EL DESPLEGABLE ABIERTO EN EL CARRITO
+  const [expandedCombos, setExpandedCombos] = useState({});
 
   // TICKET VISUAL
   const [ticketModalData, setTicketModalData] = useState(null);
@@ -229,6 +234,9 @@ export default function SalesTab({
           }, 0)
         : (item.costPrice ?? item.cost ?? 0);
 
+      // 🚀 CAPTURAR CORRECTAMENTE LOS COMPONENTES
+      const rawItems = item.items || item.raw?.items || [];
+
       return [
         ...prev,
         {
@@ -239,7 +247,7 @@ export default function SalesTab({
           cost,
           qty: 1,
           type: item.isPromo ? 'promo' : 'product',
-          items: item.items || item.raw?.items || [], // 👈 Guardamos los componentes para el tooltip
+          items: rawItems,
           raw: item
         }
       ];
@@ -569,72 +577,97 @@ export default function SalesTab({
           )}
         </div>
 
-        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+        <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
           {processedCart.length === 0 ? (
             <p className="text-xs text-slate-500 text-center py-8">
               Seleccioná productos o combos de la izquierda para sumar a la venta.
             </p>
           ) : (
-            processedCart.map((item) => (
-              <div
-                key={`${item.id}-${item.type}`}
-                className="relative group bg-slate-950 p-3 rounded-2xl border border-slate-800/80 flex items-center justify-between text-xs"
-              >
-                {/* 🚀 TOOLTIP FLOTANTE AL PASAR EL MOUSE O TOCAR EN CELULAR */}
-                {item.items && item.items.length > 0 && (
-                  <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block group-focus-within:block bg-slate-900 border border-fuchsia-500/50 text-white text-xs rounded-xl p-2.5 shadow-2xl z-50 whitespace-nowrap backdrop-blur-md">
-                    <p className="text-[10px] text-fuchsia-400 font-bold uppercase mb-1">Contiene:</p>
-                    {item.items.map((subItem, idx) => (
-                      <div key={idx} className="text-slate-200">
-                        • {subItem.quantity || 1}x {subItem.name || subItem.productId}
+            processedCart.map((item, index) => {
+              // 🚀 CRUZAR IDs CON NOMBRES REALES DE PRODUCTOS
+              const comboComponents = (item.items || []).map((sub) => {
+                const foundProd = products.find((p) => p.id === sub.productId);
+                return {
+                  qty: sub.quantity || sub.qty || 1,
+                  name: foundProd ? foundProd.name : (sub.name || sub.productId)
+                };
+              });
+
+              const isExpanded = !!expandedCombos[index];
+
+              return (
+                <div
+                  key={`${item.id}-${item.type}-${index}`}
+                  className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80 space-y-2 text-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="truncate flex-1 pr-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-slate-100">{item.name}</span>
+                        
+                        {comboComponents.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedCombos((prev) => ({ ...prev, [index]: !prev[index] }))
+                            }
+                            className="text-[10px] bg-fuchsia-500/20 text-fuchsia-300 font-bold px-2 py-0.5 rounded-lg border border-fuchsia-500/40 flex items-center gap-1 hover:bg-fuchsia-500/30 transition cursor-pointer"
+                          >
+                            <span>Ver combo</span>
+                            {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                          </button>
+                        )}
+
+                        {item.isDiscountApplied && (
+                          <span className="text-[9px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.5 rounded border border-amber-500/30">
+                            Dto. Promo
+                          </span>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
 
-                <div className="truncate flex-1 pr-2 cursor-pointer">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-slate-100 truncate">{item.name}</span>
-                    {item.items && item.items.length > 0 && (
-                      <span className="text-[9px] bg-fuchsia-500/20 text-fuchsia-400 px-1.5 py-0.5 rounded border border-fuchsia-500/30">
-                        Ver combo
-                      </span>
-                    )}
-                    {item.isDiscountApplied && (
-                      <span className="text-[9px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.5 rounded border border-amber-500/30">
-                        Combo
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 pt-0.5">
-                    <span className="font-mono text-emerald-400 text-[11px] font-bold">
-                      {formatCurrency(item.effectivePrice * item.qty)}
-                    </span>
-                    {item.isDiscountApplied && (
-                      <span className="font-mono text-[10px] text-slate-500 line-through">
-                        {formatCurrency(item.normalPrice * item.qty)}
-                      </span>
-                    )}
-                  </div>
-                </div>
+                      <div className="flex items-center gap-2 pt-1">
+                        <span className="font-mono text-emerald-400 text-[11px] font-bold">
+                          {formatCurrency(item.effectivePrice * item.qty)}
+                        </span>
+                        {item.isDiscountApplied && (
+                          <span className="font-mono text-[10px] text-slate-500 line-through">
+                            {formatCurrency(item.normalPrice * item.qty)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
 
-                <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800">
-                  <button
-                    onClick={() => updateQty(item.id, item.type === 'promo', -1)}
-                    className="text-slate-400 hover:text-white px-1 font-bold"
-                  >
-                    -
-                  </button>
-                  <span className="font-mono font-bold text-white px-1">{item.qty}</span>
-                  <button
-                    onClick={() => updateQty(item.id, item.type === 'promo', 1)}
-                    className="text-slate-400 hover:text-white px-1 font-bold"
-                  >
-                    +
-                  </button>
+                    <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800">
+                      <button
+                        onClick={() => updateQty(item.id, item.type === 'promo', -1)}
+                        className="text-slate-400 hover:text-white px-1 font-bold"
+                      >
+                        -
+                      </button>
+                      <span className="font-mono font-bold text-white px-1">{item.qty}</span>
+                      <button
+                        onClick={() => updateQty(item.id, item.type === 'promo', 1)}
+                        className="text-slate-400 hover:text-white px-1 font-bold"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 🚀 CAJA DESPLEGABLE HACIA ABAJO CON LOS NOMBRES REALES */}
+                  {comboComponents.length > 0 && isExpanded && (
+                    <div className="bg-slate-900/90 border border-fuchsia-500/30 rounded-xl p-2.5 space-y-1 animate-fadeIn">
+                      <p className="text-[10px] text-fuchsia-400 font-bold uppercase tracking-wider">Contiene:</p>
+                      {comboComponents.map((subItem, subIdx) => (
+                        <div key={subIdx} className="text-[11px] text-slate-200 flex items-center gap-1.5 font-mono">
+                          <span className="text-fuchsia-400">•</span> {subItem.qty}x {subItem.name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
