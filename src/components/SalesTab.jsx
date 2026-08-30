@@ -103,7 +103,7 @@ export default function SalesTab({
     const term = searchTerm.toLowerCase().trim();
 
     const promoMatches = (pr) => {
-      if (!pr.active) return false;
+      if (pr.active === false) return false;
       if (!term) return true;
 
       const nameMatch = (pr.name || '').toLowerCase().includes(term);
@@ -149,7 +149,7 @@ export default function SalesTab({
 
   // DETECTAR SI HAY PROMO EN EL CARRITO
   const hasPromoInCart = useMemo(() => {
-    return cart.some((item) => item.type === 'promo' || item.isPromo);
+    return cart.some((item) => item.type === 'promo' || item.isPromo || (item.name || '').toLowerCase().includes('combo'));
   }, [cart]);
 
   // APLICAR DESCUENTO P. COMBO DINÁMICAMENTE
@@ -171,7 +171,7 @@ export default function SalesTab({
       }
       return {
         ...item,
-        effectivePrice: Number(item.price || 0),
+        effectivePrice: Number(item.price || item.comboPrice || 0),
         isDiscountApplied: false
       };
     });
@@ -180,8 +180,8 @@ export default function SalesTab({
   // CÁLCULOS
   const shippingFee = parseFloat(shippingFeeInput) || 0;
   const driverExtra = parseFloat(driverExtraInput) || 0;
-  const itemsTotal = processedCart.reduce((acc, i) => acc + i.effectivePrice * i.qty, 0);
-  const cartCostTotal = processedCart.reduce((acc, i) => acc + i.cost * i.qty, 0);
+  const itemsTotal = processedCart.reduce((acc, i) => acc + (i.effectivePrice || i.price || 0) * i.qty, 0);
+  const cartCostTotal = processedCart.reduce((acc, i) => acc + (i.cost || 0) * i.qty, 0);
   const cartTotal = itemsTotal + shippingFee;
 
   const handleEfectivoChange = (val) => {
@@ -225,7 +225,7 @@ export default function SalesTab({
         );
       }
 
-      let price = item.isPromo ? item.price : (item.sellPrice || item.price || 0);
+      let price = item.isPromo ? (item.price || item.comboPrice || 0) : (item.sellPrice || item.price || 0);
       let cost = item.isPromo
         ? (item.items || []).reduce((acc, comp) => {
             const pObj = products.find((p) => p.id === comp.productId);
@@ -234,7 +234,7 @@ export default function SalesTab({
           }, 0)
         : (item.costPrice ?? item.cost ?? 0);
 
-      // 🚀 CAPTURAR CORRECTAMENTE LOS COMPONENTES
+      // 🚀 CAPTURAR CORRECTAMENTE LOS COMPONENTES (Compatible con app web y panel local)
       const rawItems = item.items || item.raw?.items || [];
 
       return [
@@ -245,8 +245,9 @@ export default function SalesTab({
           price,
           comboPrice: item.comboPrice || 0,
           cost,
-          qty: 1,
+          qty: item.qty || 1,
           type: item.isPromo ? 'promo' : 'product',
+          isPromo: item.isPromo || false,
           items: rawItems,
           raw: item
         }
@@ -254,7 +255,6 @@ export default function SalesTab({
     });
   };
 
-  // 🚀 FUNCIÓN DE AGREGADO RÁPIDO (UPSELL) PARA VASO
   const handleAddSuggested = (keywords) => {
     const foundProduct = products.find(p =>
       keywords.some(kw => (p.name || '').toLowerCase().includes(kw))
@@ -268,7 +268,6 @@ export default function SalesTab({
     }
   };
 
-  // 🧊 LISTA DE HIELOS DISPONIBLES EN TU INVENTARIO
   const iceOptions = useMemo(() => {
     return products.filter(p => (p.name || '').toLowerCase().includes('hielo') || (p.category || '').toLowerCase().includes('hielo'));
   }, [products]);
@@ -277,7 +276,7 @@ export default function SalesTab({
     setCart((prev) =>
       prev
         .map((item) => {
-          if (item.id === id && (item.type === 'promo') === isPromo) {
+          if (item.id === id && (item.type === 'promo' || item.isPromo) === isPromo) {
             const newQty = item.qty + delta;
             if (newQty <= 0) return null;
 
@@ -323,7 +322,7 @@ export default function SalesTab({
       }
     }
 
-    // 🚀 LÓGICA DE NÚMERO DE PEDIDO SECUENCIAL (Arranca en 20 y sigue sumando)
+    // 🚀 CONTADOR DE TICKET SEGURO (Arranca en 19 para que el próximo sea el 20)
     const lastTicketNum = parseInt(localStorage.getItem('benga_last_ticket_num') || '19', 10);
     const nextTicketNum = lastTicketNum + 1;
     localStorage.setItem('benga_last_ticket_num', nextTicketNum.toString());
@@ -353,7 +352,7 @@ export default function SalesTab({
     onRegisterSale(salePayload);
 
     setTicketModalData({
-      ticketId: `V-${nextTicketNum}`, // 👈 Aquí usa el número secuencial (20, 21, 22...)
+      ticketId: `V-${nextTicketNum}`,
       date: new Date().toLocaleDateString('es-AR', {
         day: '2-digit',
         month: '2-digit',
@@ -459,10 +458,9 @@ export default function SalesTab({
             const comboP = Number(item.comboPrice || item.raw?.comboPrice || 0);
             const isComboEligible = !item.isPromo && hasPromoInCart && comboP > 0;
             const displayPrice = item.isPromo
-              ? item.price
+              ? (item.price || item.comboPrice || 0)
               : (isComboEligible ? comboP : (item.sellPrice || item.price));
 
-            // Validar stock real (tanto para productos sueltos como promos)
             const outOfStock = item.isPromo 
               ? isPromoOutOfStock(item) 
               : getSafeStock(item.stock) <= 0;
@@ -482,7 +480,6 @@ export default function SalesTab({
                     : 'bg-slate-900/80 border-slate-800 hover:border-fuchsia-500/50 cursor-pointer hover:scale-[1.02]'
                 }`}
               >
-                {/* IMAGEN DE PRODUCTO / PROMO CON FILTRO DE SIN STOCK */}
                 <div className="h-28 bg-slate-950 relative overflow-hidden flex items-center justify-center border-b border-slate-800/80">
                   {outOfStock && (
                     <div className="absolute inset-0 z-20 bg-slate-950/70 backdrop-blur-[2px] flex items-center justify-center">
@@ -516,7 +513,6 @@ export default function SalesTab({
                   </span>
                 </div>
 
-                {/* DETALLES Y PRECIO */}
                 <div className="p-2.5 space-y-1 flex-1 flex flex-col justify-between">
                   <div>
                     <h3 className="font-bold text-xs text-slate-100 group-hover:text-fuchsia-400 line-clamp-1">
@@ -589,12 +585,13 @@ export default function SalesTab({
             </p>
           ) : (
             processedCart.map((item, index) => {
-              // 🚀 CRUZAR IDs CON NOMBRES REALES DE PRODUCTOS
-              const comboComponents = (item.items || []).map((sub) => {
-                const foundProd = products.find((p) => p.id === sub.productId);
+              // 🚀 LECTOR BLINDADO DE COMPONENTES (Sirve para local y para pedidos web importados)
+              const comboComponents = (item.items || item.raw?.items || []).map((sub) => {
+                const targetId = sub.productId || sub.id;
+                const foundProd = products.find((p) => p.id === targetId || (p.name && sub.name && p.name.toLowerCase() === sub.name.toLowerCase()));
                 return {
                   qty: sub.quantity || sub.qty || 1,
-                  name: foundProd ? foundProd.name : (sub.name || sub.productId)
+                  name: foundProd ? foundProd.name : (sub.name || targetId || 'Producto')
                 };
               });
 
@@ -632,7 +629,7 @@ export default function SalesTab({
 
                       <div className="flex items-center gap-2 pt-1">
                         <span className="font-mono text-emerald-400 text-[11px] font-bold">
-                          {formatCurrency(item.effectivePrice * item.qty)}
+                          {formatCurrency((item.effectivePrice || item.price || 0) * item.qty)}
                         </span>
                         {item.isDiscountApplied && (
                           <span className="font-mono text-[10px] text-slate-500 line-through">
@@ -644,14 +641,14 @@ export default function SalesTab({
 
                     <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800">
                       <button
-                        onClick={() => updateQty(item.id, item.type === 'promo', -1)}
+                        onClick={() => updateQty(item.id, item.type === 'promo' || item.isPromo, -1)}
                         className="text-slate-400 hover:text-white px-1 font-bold"
                       >
                         -
                       </button>
                       <span className="font-mono font-bold text-white px-1">{item.qty}</span>
                       <button
-                        onClick={() => updateQty(item.id, item.type === 'promo', 1)}
+                        onClick={() => updateQty(item.id, item.type === 'promo' || item.isPromo, 1)}
                         className="text-slate-400 hover:text-white px-1 font-bold"
                       >
                         +
@@ -938,7 +935,7 @@ export default function SalesTab({
                     <div key={idx} className="space-y-0.5">
                       <div className="flex justify-between">
                         <span>{item.qty}x {item.name}</span>
-                        <span className="font-bold">{formatCurrency(item.price * item.qty)}</span>
+                        <span className="font-bold">{formatCurrency((item.price || item.effectivePrice || 0) * item.qty)}</span>
                       </div>
                       {item.raw?.description && (
                         <div className="text-[9px] text-fuchsia-300 pl-2">
