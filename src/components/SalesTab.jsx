@@ -323,6 +323,11 @@ export default function SalesTab({
       }
     }
 
+    // 🚀 LÓGICA DE NÚMERO DE PEDIDO SECUENCIAL (Arranca en 20 y sigue sumando)
+    const lastTicketNum = parseInt(localStorage.getItem('benga_last_ticket_num') || '19', 10);
+    const nextTicketNum = lastTicketNum + 1;
+    localStorage.setItem('benga_last_ticket_num', nextTicketNum.toString());
+
     const salePayload = {
       saleCart: processedCart.map(item => ({ ...item, price: item.effectivePrice })),
       selectedClient,
@@ -348,7 +353,7 @@ export default function SalesTab({
     onRegisterSale(salePayload);
 
     setTicketModalData({
-      ticketId: `V-${Date.now().toString().slice(-4)}`,
+      ticketId: `V-${nextTicketNum}`, // 👈 Aquí usa el número secuencial (20, 21, 22...)
       date: new Date().toLocaleDateString('es-AR', {
         day: '2-digit',
         month: '2-digit',
