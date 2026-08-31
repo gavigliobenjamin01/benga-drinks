@@ -50,10 +50,10 @@ export default function SalesTab({
   // 🚀 ESTADO PARA CONTROLAR QUÉ COMBOS TIENEN EL DESPLEGABLE ABIERTO EN EL CARRITO
   const [expandedCombos, setExpandedCombos] = useState({});
 
-  // TICKET VISUAL
+  // TICKET VISUAL (CORREGIDO CON CONST)
   const [ticketModalData, setTicketModalData] = useState(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  ticketRef = useRef(null);
+  const ticketRef = useRef(null);
 
   // AUTO-CARGAR PEDIDO PROVENIENTE DE LA WEB DEL CLIENTE O DE REABRIR VENTA
   useEffect(() => {
@@ -296,7 +296,7 @@ export default function SalesTab({
     );
   };
 
-  // 🚀 GENERADOR DE TICKET LOCAL SEGURO (Sin errores de Firebase en la PC)
+  // 🚀 GENERADOR DE TICKET LOCAL SEGURO
   const handleSubmitSale = () => {
     if (processedCart.length === 0) return;
 
