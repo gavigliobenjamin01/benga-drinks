@@ -179,12 +179,23 @@ export default function App() {
     notify('🗑️ Pedido cancelado');
   };
 
-  // MÉTRICAS CON PAGO MIXTO
+  // MÉTRICAS CON PAGO MIXTO Y CÁLCULO SEGURO DE COSTOS
   const metrics = useMemo(() => {
     const paidSales = sales.filter((s) => s.paymentMethod !== 'Fiado');
 
     const rawRevenue = paidSales.reduce((acc, s) => acc + s.total, 0);
-    const totalSalesCost = paidSales.reduce((acc, s) => acc + s.cost, 0);
+    
+    // Cálculo seguro del costo total de las ventas (compatible con ventas viejas y nuevas)
+    const totalSalesCost = paidSales.reduce((acc, s) => {
+      if (s.cost !== undefined && s.cost !== null) return acc + Number(s.cost);
+      if (s.items && s.items.length > 0) {
+        return acc + s.items.reduce((itemAcc, item) => {
+          const itemCost = Number(item.cost) || Number(item.raw?.costPrice) || Number(item.raw?.cost) || 0;
+          return itemAcc + (itemCost * Number(item.qty || 1));
+        }, 0);
+      }
+      return acc;
+    }, 0);
 
     const merchandiseExpensesEfectivo = stockEntries.reduce((acc, e) => {
       if (e.paidEfectivo !== undefined) return acc + (e.paidEfectivo || 0);
@@ -244,7 +255,6 @@ export default function App() {
       availableToWithdraw
     };
   }, [sales, clients, products, stockEntries, withdrawals, salaryPercentage]);
-
   const inventoryCategories = useMemo(() => {
     const prodCats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
     return ['Todas', ...prodCats];
