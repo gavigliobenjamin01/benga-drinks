@@ -53,7 +53,7 @@ export default function SalesTab({
   // TICKET VISUAL
   const [ticketModalData, setTicketModalData] = useState(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const ticketRef = useRef(null);
+  ticketRef = useRef(null);
 
   // AUTO-CARGAR PEDIDO PROVENIENTE DE LA WEB DEL CLIENTE O DE REABRIR VENTA
   useEffect(() => {
@@ -234,7 +234,6 @@ export default function SalesTab({
           }, 0)
         : (item.costPrice ?? item.cost ?? 0);
 
-      // 🚀 CAPTURAR CORRECTAMENTE LOS COMPONENTES (Compatible con app web y panel local)
       const rawItems = item.items || item.raw?.items || [];
 
       return [
@@ -297,22 +296,8 @@ export default function SalesTab({
     );
   };
 
-// 🚀 NÚMERO DE TICKET CENTRALIZADO EN FIREBASE (Para todos los dispositivos)
-  const getNextTicketNumber = async () => {
-    const counterRef = doc(db, 'counters', 'ticketCounter');
-    const counterSnap = await getDoc(counterRef);
-
-    if (!counterSnap.exists()) {
-      await setDoc(counterRef, { current: 19 });
-      return 20;
-    } else {
-      await updateDoc(counterRef, { current: increment(1) });
-      const updatedSnap = await getDoc(counterRef);
-      return updatedSnap.data().current;
-    }
-  };
-
-  const handleSubmitSale = async () => {
+  // 🚀 GENERADOR DE TICKET LOCAL SEGURO (Sin errores de Firebase en la PC)
+  const handleSubmitSale = () => {
     if (processedCart.length === 0) return;
 
     if (paymentMethod === 'Fiado' && selectedClient === 'Cliente Casual') {
@@ -337,56 +322,52 @@ export default function SalesTab({
       }
     }
 
-    try {
-      // 🚀 Obtenemos el número correlativo directamente desde la nube de Firebase
-      const nextTicketNum = await getNextTicketNumber();
+    const lastTicketNum = parseInt(localStorage.getItem('benga_last_ticket_num') || '19', 10);
+    const nextTicketNum = lastTicketNum + 1;
+    localStorage.setItem('benga_last_ticket_num', nextTicketNum.toString());
 
-      const salePayload = {
-        saleCart: processedCart.map(item => ({ ...item, price: item.effectivePrice })),
-        selectedClient,
-        paymentMethod,
-        paidEfectivo,
-        paidTransferencia,
-        address,
-        shippingFee,
-        driverExtra,
-        cartTotal,
-        cartCostTotal,
-        clearCart: () => {
-          setCart([]);
-          setAddress('');
-          setShippingFeeInput('');
-          setDriverExtraInput('');
-          setPaidEfectivoInput('');
-          setPaidTransferenciaInput('');
-          setPaymentMethod('Efectivo');
-        }
-      };
+    const salePayload = {
+      saleCart: processedCart.map(item => ({ ...item, price: item.effectivePrice })),
+      selectedClient,
+      paymentMethod,
+      paidEfectivo,
+      paidTransferencia,
+      address,
+      shippingFee,
+      driverExtra,
+      cartTotal,
+      cartCostTotal,
+      clearCart: () => {
+        setCart([]);
+        setAddress('');
+        setShippingFeeInput('');
+        setDriverExtraInput('');
+        setPaidEfectivoInput('');
+        setPaidTransferenciaInput('');
+        setPaymentMethod('Efectivo');
+      }
+    };
 
-      onRegisterSale(salePayload);
+    onRegisterSale(salePayload);
 
-      setTicketModalData({
-        ticketId: `V-${nextTicketNum}`,
-        date: new Date().toLocaleDateString('es-AR', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        }),
-        client: selectedClient,
-        paymentMethod,
-        paidEfectivo,
-        paidTransferencia,
-        address,
-        items: processedCart.map(item => ({ ...item, price: item.effectivePrice })),
-        shippingFee,
-        total: cartTotal
-      });
-    } catch (err) {
-      console.error(err);
-      notify('⚠️ Error al generar el número de ticket en la base de datos');
-    }
+    setTicketModalData({
+      ticketId: `V-${nextTicketNum}`,
+      date: new Date().toLocaleDateString('es-AR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      client: selectedClient,
+      paymentMethod,
+      paidEfectivo,
+      paidTransferencia,
+      address,
+      items: processedCart.map(item => ({ ...item, price: item.effectivePrice })),
+      shippingFee,
+      total: cartTotal
+    });
   };
 
   const handleDownloadImage = async () => {
@@ -603,7 +584,6 @@ export default function SalesTab({
             </p>
           ) : (
             processedCart.map((item, index) => {
-              // 🚀 LECTOR BLINDADO DE COMPONENTES (Sirve para local y para pedidos web importados)
               const comboComponents = (item.items || item.raw?.items || []).map((sub) => {
                 const targetId = sub.productId || sub.id;
                 const foundProd = products.find((p) => p.id === targetId || (p.name && sub.name && p.name.toLowerCase() === sub.name.toLowerCase()));
@@ -674,7 +654,6 @@ export default function SalesTab({
                     </div>
                   </div>
 
-                  {/* 🚀 CAJA DESPLEGABLE HACIA ABAJO CON LOS NOMBRES REALES */}
                   {comboComponents.length > 0 && isExpanded && (
                     <div className="bg-slate-900/90 border border-fuchsia-500/30 rounded-xl p-2.5 space-y-1 animate-fadeIn">
                       <p className="text-[10px] text-fuchsia-400 font-bold uppercase tracking-wider">Contiene:</p>
@@ -804,7 +783,6 @@ export default function SalesTab({
             </div>
           </div>
 
-          {/* SUGERIDOS RÁPIDOS (UPSELL) */}
           <div className="pt-3 border-t border-slate-800 space-y-2 relative">
             <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
               <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Sugeridos Rápidos (Upsell)
