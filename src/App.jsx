@@ -179,13 +179,13 @@ export default function App() {
     notify('🗑️ Pedido cancelado');
   };
 
-  // MÉTRICAS CON PAGO MIXTO Y CÁLCULO SEGURO DE COSTOS
+  // MÉTRICAS SIMPLIFICADAS Y DIRECTAS PARA LAS CAJAS
   const metrics = useMemo(() => {
     const paidSales = sales.filter((s) => s.paymentMethod !== 'Fiado');
 
-    const rawRevenue = paidSales.reduce((acc, s) => acc + s.total, 0);
+    const totalRevenue = paidSales.reduce((acc, s) => acc + s.total, 0);
     
-    // Cálculo seguro del costo total de las ventas (compatible con ventas viejas y nuevas)
+    // Cálculo seguro del costo total de las ventas
     const totalSalesCost = paidSales.reduce((acc, s) => {
       if (s.cost !== undefined && s.cost !== null) return acc + Number(s.cost);
       if (s.items && s.items.length > 0) {
@@ -197,39 +197,23 @@ export default function App() {
       return acc;
     }, 0);
 
-    const merchandiseExpensesEfectivo = stockEntries.reduce((acc, e) => {
-      if (e.paidEfectivo !== undefined) return acc + (e.paidEfectivo || 0);
-      return (e.paymentMethod || 'Efectivo') === 'Efectivo' ? acc + (e.totalCost || 0) : acc;
-    }, 0);
-
-    const merchandiseExpensesTransferencia = stockEntries.reduce((acc, e) => {
-      if (e.paidTransferencia !== undefined) return acc + (e.paidTransferencia || 0);
-      return e.paymentMethod === 'Transferencia' ? acc + (e.totalCost || 0) : acc;
-    }, 0);
-
-    const merchandiseExpenses = merchandiseExpensesEfectivo + merchandiseExpensesTransferencia;
-
-    const rawEfectivoRevenue = paidSales.reduce((acc, s) => {
+    const efectivoRevenue = paidSales.reduce((acc, s) => {
       if (s.paymentMethod === 'Efectivo') return acc + s.total;
       if (s.paymentMethod === 'Mixto') return acc + (s.paidEfectivo || 0);
       return acc;
     }, 0);
 
-    const rawTransferenciaRevenue = paidSales.reduce((acc, s) => {
+    const transferenciaRevenue = paidSales.reduce((acc, s) => {
       if (s.paymentMethod === 'Transferencia') return acc + s.total;
       if (s.paymentMethod === 'Mixto') return acc + (s.paidTransferencia || 0);
       return acc;
     }, 0);
 
-    const efectivoRevenue = rawEfectivoRevenue - merchandiseExpensesEfectivo;
-    const transferenciaRevenue = rawTransferenciaRevenue - merchandiseExpensesTransferencia;
-
     const fiadoRevenue = sales
       .filter((s) => s.paymentMethod === 'Fiado')
       .reduce((acc, s) => acc + s.total, 0);
 
-    const totalRevenue = rawRevenue - merchandiseExpenses;
-    const netProfit = rawRevenue - totalSalesCost - merchandiseExpenses;
+    const netProfit = totalRevenue - totalSalesCost;
     const totalPendingDebt = clients.reduce((acc, c) => acc + c.debt, 0);
     const lowStockCount = products.filter((p) => p.stock <= p.minStock).length;
     const stockValuation = products.reduce((acc, p) => acc + (p.costPrice || p.cost || 0) * p.stock, 0);
@@ -245,8 +229,8 @@ export default function App() {
       totalPendingDebt,
       lowStockCount,
       stockValuation,
-      merchandiseExpenses,
-      rawRevenue,
+      merchandiseExpenses: 0,
+      rawRevenue: totalRevenue,
       efectivoRevenue,
       transferenciaRevenue,
       fiadoRevenue,
@@ -254,7 +238,7 @@ export default function App() {
       totalWithdrawn,
       availableToWithdraw
     };
-  }, [sales, clients, products, stockEntries, withdrawals, salaryPercentage]);
+  }, [sales, clients, products, withdrawals, salaryPercentage]);
   const inventoryCategories = useMemo(() => {
     const prodCats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
     return ['Todas', ...prodCats];
