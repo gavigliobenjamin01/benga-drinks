@@ -93,7 +93,7 @@ export default function App() {
   const [promoDescription, setPromoDescription] = useState('');
   const [selectedProdForPromo, setSelectedProdForPromo] = useState('');
 
- // CONEXIÓN A FIRESTORE EN TIEMPO REAL
+  // CONEXIÓN A FIRESTORE EN TIEMPO REAL
   useEffect(() => {
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
       const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
@@ -127,7 +127,6 @@ export default function App() {
       setWithdrawals(list);
     });
 
-    // ESCUCHAR PEDIDOS QUE LLEGAN DE LA WEB DE CLIENTES
     const unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
       const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
       list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
@@ -165,7 +164,6 @@ export default function App() {
     await setDoc(doc(db, 'settings', 'config'), { salaryPercentage: newVal }, { merge: true });
   };
 
-  // ACEPTAR PEDIDO WEB E IMPORTARLO A REGISTRAR VENTA
   const handleAcceptWebOrder = async (order) => {
     setPrefilledOrder(order);
     setActiveTab('sales');
@@ -179,19 +177,17 @@ export default function App() {
     notify('🗑️ Pedido cancelado');
   };
 
-  // MÉTRICAS BLINDADAS (FUERZA EL CÁLCULO INCLUSO SI LAS VENTAS VIEJAS NO TIENEN COSTO)
+  // MÉTRICAS Y CÁLCULO DE CAJAS BLINDADO
   const metrics = useMemo(() => {
     const paidSales = sales.filter((s) => s.paymentMethod !== 'Fiado');
 
     const totalRevenue = paidSales.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
     
     const totalSalesCost = paidSales.reduce((acc, s) => {
-      // 1. Si la venta tiene costo guardado y es mayor a 0 lo usamos
       if (s.cost !== undefined && s.cost !== null && Number(s.cost) > 0) {
         return acc + Number(s.cost);
       }
       
-      // 2. Si tiene items, sumamos el costo de cada producto del inventario actual
       if (s.items && s.items.length > 0) {
         const itemsCostSum = s.items.reduce((itemAcc, item) => {
           const foundProd = products.find(p => p.id === item.id || p.name === item.name);
@@ -202,8 +198,6 @@ export default function App() {
         if (itemsCostSum > 0) return acc + itemsCostSum;
       }
 
-      // 3. EMERGENCIA: Si la venta es muy vieja y no tiene ningún costo por ningún lado, 
-      // estimamos un 60% del total como costo para que las cajas reflejen números reales y no queden en $0.
       return acc + (Number(s.total) || 0) * 0.6;
     }, 0);
 
@@ -249,6 +243,9 @@ export default function App() {
       availableToWithdraw
     };
   }, [sales, clients, products, withdrawals, salaryPercentage]);
+
+  // CATEGORÍAS DE INVENTARIO CORREGIDAS
+  const inventoryCategories = useMemo(() => {
     const prodCats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
     return ['Todas', ...prodCats];
   }, [products]);
@@ -743,7 +740,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row antialiased relative">
-      {/* BOTÓN FLOTANTE ALERTA DE PEDIDOS WEB PENDIENTES */}
       {webOrders.length > 0 && (
         <button
           onClick={() => setShowWebOrdersModal(true)}
@@ -754,7 +750,6 @@ export default function App() {
         </button>
       )}
 
-      {/* TOAST */}
       {toast && (
         <div className="fixed top-5 right-5 z-[100] bg-fuchsia-500 text-slate-950 px-4 py-3 rounded-2xl font-bold shadow-2xl shadow-fuchsia-500/40 flex items-center gap-2 animate-bounce">
           <Check className="w-5 h-5 stroke-[3]" />
@@ -762,10 +757,8 @@ export default function App() {
         </div>
       )}
 
-      {/* SIDEBAR */}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} metrics={metrics} />
 
-      {/* ÁREA PRINCIPAL */}
       <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-slate-950">
         {activeTab === 'sales' && (
           <SalesTab
@@ -789,7 +782,6 @@ export default function App() {
             setSaleToPayModal={setSaleToPayModal}
             setSaleToDeleteConfirm={setSaleToDeleteConfirm}
             onReopenSale={(sale) => {
-              // 1. Cargamos el ticket en la caja
               setPrefilledOrder({
                 items: sale.items,
                 clientName: sale.client,
@@ -798,14 +790,8 @@ export default function App() {
                 paidEfectivo: sale.paidEfectivo,
                 paidTransferencia: sale.paidTransferencia,
               });
-              
-              // 2. Borramos la venta original de la base de datos y devolvemos el stock temporalmente
-              handleDeleteSale(sale.id); 
-              
-              // 3. Cambiamos a la pestaña de ventas
-              setActiveTab('sales'); 
-              
-              // 4. Avisamos al usuario
+              handleDeleteSale(sale.id);
+              setActiveTab('sales');
               notify('✏️ Venta reabierta. Podés modificarla y volver a registrarla.');
             }}
           />
@@ -866,7 +852,6 @@ export default function App() {
         )}
       </main>
 
-     {/* MODAL PEDIDOS WEB ENTRANTES */}
       {showWebOrdersModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -890,7 +875,6 @@ export default function App() {
                   <div key={ord.id} className="bg-slate-950 p-4 rounded-2xl border border-fuchsia-500/30 space-y-3">
                     <div className="flex justify-between items-start text-xs">
                       <div>
-                        {/* 🚀 AQUÍ INTEGRAMOS EL NOMBRE Y EL NÚMERO DE PEDIDO */}
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-white text-sm">{ord.clientName || 'Cliente Web'}</span>
                           {ord.orderNumber && (
@@ -939,7 +923,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL RETIRO */}
       {showWithdrawModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -1039,7 +1022,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL CAJAS */}
       {showBoxesModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -1124,7 +1106,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL COBRAR FIADO */}
       {saleToPayModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl">
@@ -1166,7 +1147,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL ELIMINAR VENTA */}
       {saleToDeleteConfirm && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl">
@@ -1192,7 +1172,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL NUEVO PRODUCTO (CON CAMPO FOTO) */}
       {showProductModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -1216,7 +1195,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* CAMPO DE LINK DE FOTO */}
               <div className="bg-slate-950/70 p-3 rounded-2xl border border-fuchsia-500/30 space-y-1">
                 <label className="text-fuchsia-400 font-bold block mb-1 flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4" /> Link de Imagen / Foto (URL Opcional):
@@ -1314,7 +1292,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL EDITAR PRODUCTO (CON CAMPO FOTO) */}
       {editingProduct && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -1340,7 +1317,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* CAMPO DE LINK DE FOTO */}
               <div className="bg-slate-950/70 p-3 rounded-2xl border border-fuchsia-500/30 space-y-1">
                 <label className="text-fuchsia-400 font-bold block mb-1 flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4" /> Link de Imagen / Foto (URL):
@@ -1430,7 +1406,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL CREAR PROMO (CON CAMPO FOTO) */}
       {showPromoModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -1452,7 +1427,6 @@ export default function App() {
                 </select>
               </div>
 
-              {/* CAMPO DE LINK DE FOTO */}
               <div className="bg-slate-950/70 p-3 rounded-2xl border border-fuchsia-500/30 space-y-1">
                 <label className="text-fuchsia-400 font-bold block mb-1 flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4" /> Link de Imagen / Foto (URL Opcional):
@@ -1568,7 +1542,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL EDITAR PROMO (CON CAMPO FOTO) */}
       {editingPromo && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -1592,7 +1565,6 @@ export default function App() {
                 </select>
               </div>
 
-              {/* CAMPO DE LINK DE FOTO */}
               <div className="bg-slate-950/70 p-3 rounded-2xl border border-fuchsia-500/30 space-y-1">
                 <label className="text-fuchsia-400 font-bold block mb-1 flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4" /> Link de Imagen / Foto (URL):
@@ -1710,7 +1682,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL CREAR CLIENTE */}
       {showClientModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 space-y-4 shadow-2xl">
