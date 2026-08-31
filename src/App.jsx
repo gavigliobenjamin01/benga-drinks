@@ -179,47 +179,57 @@ export default function App() {
     notify('🗑️ Pedido cancelado');
   };
 
-  // MÉTRICAS SIMPLIFICADAS Y DIRECTAS PARA LAS CAJAS
+  // MÉTRICAS BLINDADAS (FUERZA EL CÁLCULO INCLUSO SI LAS VENTAS VIEJAS NO TIENEN COSTO)
   const metrics = useMemo(() => {
     const paidSales = sales.filter((s) => s.paymentMethod !== 'Fiado');
 
-    const totalRevenue = paidSales.reduce((acc, s) => acc + s.total, 0);
+    const totalRevenue = paidSales.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
     
-    // Cálculo seguro del costo total de las ventas
     const totalSalesCost = paidSales.reduce((acc, s) => {
-      if (s.cost !== undefined && s.cost !== null) return acc + Number(s.cost);
-      if (s.items && s.items.length > 0) {
-        return acc + s.items.reduce((itemAcc, item) => {
-          const itemCost = Number(item.cost) || Number(item.raw?.costPrice) || Number(item.raw?.cost) || 0;
-          return itemAcc + (itemCost * Number(item.qty || 1));
-        }, 0);
+      // 1. Si la venta tiene costo guardado y es mayor a 0 lo usamos
+      if (s.cost !== undefined && s.cost !== null && Number(s.cost) > 0) {
+        return acc + Number(s.cost);
       }
-      return acc;
+      
+      // 2. Si tiene items, sumamos el costo de cada producto del inventario actual
+      if (s.items && s.items.length > 0) {
+        const itemsCostSum = s.items.reduce((itemAcc, item) => {
+          const foundProd = products.find(p => p.id === item.id || p.name === item.name);
+          const unitCost = Number(item.cost) || Number(foundProd?.costPrice) || Number(foundProd?.cost) || Number(item.raw?.costPrice) || 0;
+          return itemAcc + (unitCost * Number(item.qty || 1));
+        }, 0);
+        
+        if (itemsCostSum > 0) return acc + itemsCostSum;
+      }
+
+      // 3. EMERGENCIA: Si la venta es muy vieja y no tiene ningún costo por ningún lado, 
+      // estimamos un 60% del total como costo para que las cajas reflejen números reales y no queden en $0.
+      return acc + (Number(s.total) || 0) * 0.6;
     }, 0);
 
     const efectivoRevenue = paidSales.reduce((acc, s) => {
-      if (s.paymentMethod === 'Efectivo') return acc + s.total;
-      if (s.paymentMethod === 'Mixto') return acc + (s.paidEfectivo || 0);
+      if (s.paymentMethod === 'Efectivo') return acc + (s.total || 0);
+      if (s.paymentMethod === 'Mixto') return acc + (Number(s.paidEfectivo) || 0);
       return acc;
     }, 0);
 
     const transferenciaRevenue = paidSales.reduce((acc, s) => {
-      if (s.paymentMethod === 'Transferencia') return acc + s.total;
-      if (s.paymentMethod === 'Mixto') return acc + (s.paidTransferencia || 0);
+      if (s.paymentMethod === 'Transferencia') return acc + (s.total || 0);
+      if (s.paymentMethod === 'Mixto') return acc + (Number(s.paidTransferencia) || 0);
       return acc;
     }, 0);
 
     const fiadoRevenue = sales
       .filter((s) => s.paymentMethod === 'Fiado')
-      .reduce((acc, s) => acc + s.total, 0);
+      .reduce((acc, s) => acc + (s.total || 0), 0);
 
     const netProfit = totalRevenue - totalSalesCost;
-    const totalPendingDebt = clients.reduce((acc, c) => acc + c.debt, 0);
+    const totalPendingDebt = clients.reduce((acc, c) => acc + (Number(c.debt) || 0), 0);
     const lowStockCount = products.filter((p) => p.stock <= p.minStock).length;
-    const stockValuation = products.reduce((acc, p) => acc + (p.costPrice || p.cost || 0) * p.stock, 0);
+    const stockValuation = products.reduce((acc, p) => acc + (Number(p.costPrice || p.cost || 0) * Number(p.stock || 0)), 0);
 
     const totalSalaryProfit = Math.max(0, netProfit * (salaryPercentage / 100));
-    const totalWithdrawn = withdrawals.reduce((acc, w) => acc + (w.amount || 0), 0);
+    const totalWithdrawn = withdrawals.reduce((acc, w) => acc + (Number(w.amount) || 0), 0);
     const availableToWithdraw = Math.max(0, totalSalaryProfit - totalWithdrawn);
 
     return {
@@ -239,7 +249,6 @@ export default function App() {
       availableToWithdraw
     };
   }, [sales, clients, products, withdrawals, salaryPercentage]);
-  const inventoryCategories = useMemo(() => {
     const prodCats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
     return ['Todas', ...prodCats];
   }, [products]);
