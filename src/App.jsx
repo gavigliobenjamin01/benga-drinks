@@ -180,8 +180,6 @@ export default function App() {
   // MÉTRICAS Y CÁLCULO DE CAJAS BLINDADO
   const metrics = useMemo(() => {
     const paidSales = sales.filter((s) => s.paymentMethod !== 'Fiado');
-
-    const totalRevenue = paidSales.reduce((acc, s) => acc + (Number(s.total) || 0), 0);
     
     const totalSalesCost = paidSales.reduce((acc, s) => {
       if (s.cost !== undefined && s.cost !== null && Number(s.cost) > 0) {
@@ -214,7 +212,6 @@ export default function App() {
     }, 0) - stockEntries.reduce((acc, e) => acc + (Number(e.paidTransferencia) || 0), 0);
 
     const totalRevenue = efectivoRevenue + transferenciaRevenue;
-    
     const fiadoRevenue = sales
       .filter((s) => s.paymentMethod === 'Fiado')
       .reduce((acc, s) => acc + (s.total || 0), 0);
