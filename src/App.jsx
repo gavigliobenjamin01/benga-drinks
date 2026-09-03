@@ -215,7 +215,7 @@ export default function App() {
 
     // NUEVO: El total grande de arriba pasa a ser la plata real disponible (Efectivo + MP menos retiros personales)
     const totalWithdrawn = withdrawals.reduce((acc, w) => acc + (Number(w.amount) || 0), 0);
-    const totalRevenue = Math.max(0, (efectivoRevenue + transferenciaRevenue) - totalWithdrawn);
+    const totalRevenue = efectivoRevenue + transferenciaRevenue;
     const fiadoRevenue = sales
       .filter((s) => s.paymentMethod === 'Fiado')
       .reduce((acc, s) => acc + (s.total || 0), 0);
