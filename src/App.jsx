@@ -213,9 +213,8 @@ export default function App() {
       return acc;
     }, 0) - stockEntries.reduce((acc, e) => acc + (Number(e.paidTransferencia) || 0), 0);
 
-    // NUEVO: El total grande de arriba pasa a ser la plata real disponible (Efectivo + MP menos retiros personales)
-    const totalWithdrawn = withdrawals.reduce((acc, w) => acc + (Number(w.amount) || 0), 0);
     const totalRevenue = efectivoRevenue + transferenciaRevenue;
+    
     const fiadoRevenue = sales
       .filter((s) => s.paymentMethod === 'Fiado')
       .reduce((acc, s) => acc + (s.total || 0), 0);
@@ -230,7 +229,7 @@ export default function App() {
     const availableToWithdraw = Math.max(0, totalSalaryProfit - totalWithdrawn);
 
     return {
-      totalRevenue, // <--- Esta ahora es tu plata real disponible en total
+      totalRevenue, // <--- Suma exacta de tu efectivo + Mercado Pago disponibles
       totalCost: totalSalesCost,
       netProfit,
       totalPendingDebt,
