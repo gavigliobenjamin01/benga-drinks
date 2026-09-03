@@ -205,14 +205,13 @@ export default function App() {
       if (s.paymentMethod === 'Efectivo') return acc + (s.total || 0);
       if (s.paymentMethod === 'Mixto') return acc + (Number(s.paidEfectivo) || 0);
       return acc;
-    }, 0);
+    }, 0) - stockEntries.reduce((acc, e) => acc + (Number(e.paidEfectivo) || 0), 0);
 
     const transferenciaRevenue = paidSales.reduce((acc, s) => {
       if (s.paymentMethod === 'Transferencia') return acc + (s.total || 0);
       if (s.paymentMethod === 'Mixto') return acc + (Number(s.paidTransferencia) || 0);
       return acc;
-    }, 0);
-
+    }, 0) - stockEntries.reduce((acc, e) => acc + (Number(e.paidTransferencia) || 0), 0);
     const fiadoRevenue = sales
       .filter((s) => s.paymentMethod === 'Fiado')
       .reduce((acc, s) => acc + (s.total || 0), 0);
