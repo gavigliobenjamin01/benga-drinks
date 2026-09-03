@@ -27,14 +27,14 @@ export default function DashboardTab({
     <div className="space-y-6">
       {/* TARJETAS PRINCIPALES */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* TARJETA INGRESOS TOTALES CON DESGLOSE */}
+        {/* TARJETA DINERO TOTAL EN CAJA / DISPONIBLE */}
         <div
           onClick={() => setShowBoxesModal(true)}
           className="bg-slate-900/90 border border-slate-800 p-5 rounded-3xl cursor-pointer hover:border-fuchsia-500/50 transition space-y-3 group shadow-xl"
         >
           <div className="flex justify-between items-start">
             <div>
-              <span className="text-xs text-slate-400 font-medium block">Ingresos Totales (Netos)</span>
+              <span className="text-xs text-slate-400 font-medium block">Dinero Total en Caja / Disponible</span>
               <div className="font-mono text-2xl font-bold text-white mt-1 group-hover:text-fuchsia-400 transition">
                 {formatCurrency(metrics.totalRevenue)}
               </div>
@@ -62,7 +62,6 @@ export default function DashboardTab({
 
           <p className="text-[10px] text-slate-500">Toca para ver el detalle de las Cajas</p>
         </div>
-
         {/* GANANCIA NETA LIMPIA */}
         <div
           onClick={() => setShowBoxesModal(true)}
