@@ -50,7 +50,7 @@ export default function SalesTab({
   // 🚀 ESTADO PARA CONTROLAR QUÉ COMBOS TIENEN EL DESPLEGABLE ABIERTO EN EL CARRITO
   const [expandedCombos, setExpandedCombos] = useState({});
 
-  // TICKET VISUAL (CORREGIDO CON CONST)
+  // TICKET VISUAL
   const [ticketModalData, setTicketModalData] = useState(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const ticketRef = useRef(null);
@@ -77,7 +77,7 @@ export default function SalesTab({
     }
   }, [prefilledOrder]);
 
-  // 🛡️ LECTOR SEGURO DE STOCK Y VALIDACIÓN DE PROMOS (Única fuente de verdad)
+  // 🛡️ LECTOR SEGURO DE STOCK Y VALIDACIÓN DE PROMOS
   const getSafeStock = (val) => {
     if (val === undefined || val === null || val === '') return 0;
     const num = parseInt(val, 10);
@@ -152,14 +152,15 @@ export default function SalesTab({
     return cart.some((item) => item.type === 'promo' || item.isPromo || (item.name || '').toLowerCase().includes('combo'));
   }, [cart]);
 
-  // APLICAR DESCUENTO P. COMBO DINÁMICAMENTE
+  // APLICAR DESCUENTO P. COMBO DINÁMICAMENTE (POR COMBO EN CARRITO O POR CANTIDAD >= 2)
   const processedCart = useMemo(() => {
     return cart.map((item) => {
       if (item.type === 'product' || !item.isPromo) {
         const comboP = Number(item.raw?.comboPrice || item.comboPrice || 0);
         const normalP = Number(item.raw?.sellPrice || item.raw?.price || item.sellPrice || item.price || 0);
 
-        const isDiscountApplied = hasPromoInCart && comboP > 0;
+        // Aplica precio combo si hay un combo en el carrito O si lleva 2 o más unidades
+        const isDiscountApplied = comboP > 0 && (hasPromoInCart || item.qty >= 2);
         const effectivePrice = isDiscountApplied ? comboP : normalP;
 
         return {
@@ -296,7 +297,6 @@ export default function SalesTab({
     );
   };
 
-  // 🚀 GENERADOR DE TICKET LOCAL SEGURO
   const handleSubmitSale = () => {
     if (processedCart.length === 0) return;
 
@@ -455,7 +455,10 @@ export default function SalesTab({
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[580px] overflow-y-auto pr-1">
           {filteredCatalog.map((item) => {
             const comboP = Number(item.comboPrice || item.raw?.comboPrice || 0);
-            const isComboEligible = !item.isPromo && hasPromoInCart && comboP > 0;
+            const itemInCart = cart.find((c) => c.id === item.id && !c.isPromo);
+            const currentQty = itemInCart ? itemInCart.qty : 0;
+            
+            const isComboEligible = !item.isPromo && comboP > 0 && (hasPromoInCart || currentQty >= 2);
             const displayPrice = item.isPromo
               ? (item.price || item.comboPrice || 0)
               : (isComboEligible ? comboP : (item.sellPrice || item.price));
@@ -813,7 +816,10 @@ export default function SalesTab({
                       iceOptions.map((ice) => {
                         const comboP = Number(ice.comboPrice || 0);
                         const normalP = Number(ice.sellPrice || ice.price || 0);
-                        const isComboEligible = hasPromoInCart && comboP > 0;
+                        const iceInCart = cart.find((c) => c.id === ice.id && !c.isPromo);
+                        const currentQty = iceInCart ? iceInCart.qty : 0;
+
+                        const isComboEligible = comboP > 0 && (hasPromoInCart || currentQty >= 2);
                         const finalIcePrice = isComboEligible ? comboP : normalP;
 
                         return (
