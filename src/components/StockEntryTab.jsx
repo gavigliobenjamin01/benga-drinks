@@ -1,5 +1,5 @@
-import React from 'react';
-import { Search, Plus, Trash2, PackageCheck, History } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, Plus, Trash2, PackageCheck, History, Receipt } from 'lucide-react';
 import { formatCurrency, formatDate } from '../utils';
 
 export default function StockEntryTab({
@@ -16,8 +16,34 @@ export default function StockEntryTab({
   entryTransferenciaInput,
   setEntryTransferenciaInput,
   handleRegisterStockEntry,
-  handleDeleteStockEntry
+  handleDeleteStockEntry,
+  // 🟢 PROPS DE GASTOS VARIOS
+  expenses = [],
+  onAddExpense,
+  onDeleteExpense
 }) {
+  // ESTADOS PARA EL FORMULARIO DE GASTOS VARIOS
+  const [expenseDesc, setExpenseDesc] = useState('');
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseMethod, setExpenseMethod] = useState('Efectivo');
+
+  const handleExpenseSubmit = (e) => {
+    e.preventDefault();
+    if (!expenseDesc.trim() || !expenseAmount || Number(expenseAmount) <= 0) return;
+
+    if (onAddExpense) {
+      onAddExpense({
+        description: expenseDesc.trim(),
+        amount: Number(expenseAmount),
+        paymentMethod: expenseMethod,
+        date: new Date().toISOString()
+      });
+    }
+
+    setExpenseDesc('');
+    setExpenseAmount('');
+  };
+
   const filteredProducts = products.filter(
     (p) =>
       p.name?.toLowerCase().includes(entrySearchTerm.toLowerCase()) ||
@@ -170,7 +196,7 @@ export default function StockEntryTab({
         </div>
       </div>
 
-      {/* SECCIÓN HISTORIAL DE INGRESOS */}
+      {/* SECCIÓN HISTORIAL DE INGRESOS DE MERCADERÍA */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
         <h3 className="font-bold text-base text-white flex items-center gap-2 border-b border-slate-800 pb-3">
           <History className="w-5 h-5 text-fuchsia-400" /> Historial de Ingresos de Mercadería
@@ -224,6 +250,103 @@ export default function StockEntryTab({
             })}
           </div>
         )}
+      </div>
+
+      {/* 💸 SECCIÓN DE GASTOS VARIOS / INSUMOS DEL NEGOCIO */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-xl">
+        <div className="flex justify-between items-center pb-3 border-b border-slate-800">
+          <h3 className="font-bold text-base text-white flex items-center gap-2">
+            <Receipt className="w-5 h-5 text-rose-400" /> Gastos Varios / Insumos del Negocio
+          </h3>
+          <span className="text-xs text-slate-400">Bolsas, artículos de limpieza, fletes, etc.</span>
+        </div>
+
+        {/* FORMULARIO DE REGISTRO RÁPIDO */}
+        <form onSubmit={handleExpenseSubmit} className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+          <div className="sm:col-span-2">
+            <label className="text-[11px] text-slate-400 block mb-1">Concepto / Detalle del Gasto:</label>
+            <input
+              type="text"
+              placeholder="Ej: Compras de bolsas de hielo / Cinta / Flete"
+              value={expenseDesc}
+              onChange={(e) => setExpenseDesc(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-rose-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-[11px] text-slate-400 block mb-1">Monto ($):</label>
+            <input
+              type="number"
+              step="any"
+              placeholder="0"
+              value={expenseAmount}
+              onChange={(e) => setExpenseAmount(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white font-mono focus:outline-none focus:border-rose-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-[11px] text-slate-400 block mb-1">Pagado con:</label>
+            <select
+              value={expenseMethod}
+              onChange={(e) => setExpenseMethod(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-rose-500"
+            >
+              <option value="Efectivo">💵 Caja Efectivo</option>
+              <option value="Transferencia">💳 Mercado Pago / Transf.</option>
+            </select>
+          </div>
+
+          <div className="sm:col-span-4 flex justify-end pt-1">
+            <button
+              type="submit"
+              className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-bold text-xs px-4 py-2.5 rounded-xl transition flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" /> Registrar Gasto
+            </button>
+          </div>
+        </form>
+
+        {/* HISTORIAL / TABLA DE GASTOS */}
+        <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+          {expenses.length === 0 ? (
+            <p className="text-xs text-slate-500 text-center py-4">No hay gastos varios registrados.</p>
+          ) : (
+            expenses.map((ex) => (
+              <div
+                key={ex.id || ex.date}
+                className="bg-slate-950 p-3 rounded-xl border border-slate-800/80 flex items-center justify-between text-xs"
+              >
+                <div className="space-y-0.5">
+                  <span className="font-bold text-slate-200 block">{ex.description}</span>
+                  <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                    <span>{formatDate(ex.date)}</span>
+                    <span>•</span>
+                    <span className={ex.paymentMethod === 'Efectivo' ? 'text-emerald-400' : 'text-fuchsia-400'}>
+                      {ex.paymentMethod === 'Efectivo' ? '💵 Efectivo' : '💳 Transferencia / MP'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-rose-400 font-bold text-sm">
+                    -{formatCurrency(ex.amount)}
+                  </span>
+                  {onDeleteExpense && (
+                    <button
+                      onClick={() => onDeleteExpense(ex.id)}
+                      className="text-slate-500 hover:text-red-400 transition p-1"
+                      title="Eliminar gasto"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );
