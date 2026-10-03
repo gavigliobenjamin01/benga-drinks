@@ -4,6 +4,7 @@ import {
   onSnapshot,
   doc,
   setDoc,
+  addDoc,
   updateDoc,
   deleteDoc
 } from 'firebase/firestore';
@@ -50,6 +51,7 @@ export default function App() {
   const [clients, setClients] = useState([]);
   const [stockEntries, setStockEntries] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
+  const [expenses, setExpenses] = useState([]);
 
   // ESTADO PARA PEDIDOS PROVENIENTES DE LA APP DE CLIENTES
   const [webOrders, setWebOrders] = useState([]);
@@ -127,6 +129,12 @@ export default function App() {
       setWithdrawals(list);
     });
 
+    const unsubExpenses = onSnapshot(collection(db, 'expenses'), (snapshot) => {
+      const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
+      list.sort((a, b) => new Date(b.date) - new Date(a.date));
+      setExpenses(list);
+    });
+
     const unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
       const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
       list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
@@ -149,6 +157,7 @@ export default function App() {
       unsubSales();
       unsubStockEntries();
       unsubWithdrawals();
+      unsubExpenses();
       unsubOrders();
       unsubSettings();
     };
@@ -177,7 +186,26 @@ export default function App() {
     notify('🗑️ Pedido cancelado');
   };
 
-  // MÉTRICAS Y CÁLCULO DE CAJAS BLINDADO
+  // FUNCIONES PARA GASTOS VARIOS
+  const handleAddExpense = async (expenseData) => {
+    try {
+      await addDoc(collection(db, 'expenses'), expenseData);
+      notify('💸 Gasto registrado correctamente');
+    } catch (err) {
+      notify('⚠️ Error al registrar el gasto');
+    }
+  };
+
+  const handleDeleteExpense = async (expenseId) => {
+    try {
+      await deleteDoc(doc(db, 'expenses', expenseId));
+      notify('🗑️ Gasto eliminado');
+    } catch (err) {
+      notify('⚠️ Error al eliminar el gasto');
+    }
+  };
+
+  // MÉTRICAS Y CÁLCULO DE CAJAS BLINDADO (CON GASTOS VARIOS INCLUIDOS)
   const metrics = useMemo(() => {
     const paidSales = sales.filter((s) => s.paymentMethod !== 'Fiado');
     
@@ -199,17 +227,28 @@ export default function App() {
       return acc + (Number(s.total) || 0) * 0.6;
     }, 0);
 
+    // 💸 Gastos varios por medio de pago (Bolsas, insumos, fletes, etc.)
+    const totalEfectivoExpenses = (expenses || []).reduce((acc, ex) => {
+      return ex.paymentMethod === 'Efectivo' ? acc + (Number(ex.amount) || 0) : acc;
+    }, 0);
+
+    const totalTransferenciaExpenses = (expenses || []).reduce((acc, ex) => {
+      return ex.paymentMethod === 'Transferencia' ? acc + (Number(ex.amount) || 0) : acc;
+    }, 0);
+
+    // 💵 Efectivo disponible = Ventas Efectivo - Compras Stock - Gastos Varios Efectivo
     const efectivoRevenue = paidSales.reduce((acc, s) => {
       if (s.paymentMethod === 'Efectivo') return acc + (s.total || 0);
       if (s.paymentMethod === 'Mixto') return acc + (Number(s.paidEfectivo) || 0);
       return acc;
-    }, 0) - stockEntries.reduce((acc, e) => acc + (Number(e.paidEfectivo) || 0), 0);
+    }, 0) - (stockEntries || []).reduce((acc, e) => acc + (Number(e.paidEfectivo) || 0), 0) - totalEfectivoExpenses;
 
+    // 💳 Transferencia disponible = Ventas MP - Compras Stock MP - Gastos Varios MP
     const transferenciaRevenue = paidSales.reduce((acc, s) => {
       if (s.paymentMethod === 'Transferencia') return acc + (s.total || 0);
       if (s.paymentMethod === 'Mixto') return acc + (Number(s.paidTransferencia) || 0);
       return acc;
-    }, 0) - stockEntries.reduce((acc, e) => acc + (Number(e.paidTransferencia) || 0), 0);
+    }, 0) - (stockEntries || []).reduce((acc, e) => acc + (Number(e.paidTransferencia) || 0), 0) - totalTransferenciaExpenses;
 
     const totalRevenue = efectivoRevenue + transferenciaRevenue;
     const fiadoRevenue = sales
@@ -226,7 +265,7 @@ export default function App() {
     const availableToWithdraw = Math.max(0, totalSalaryProfit - totalWithdrawn);
 
     return {
-      totalRevenue, // <--- Suma exacta de tu efectivo + Mercado Pago disponibles
+      totalRevenue,
       totalCost: totalSalesCost,
       netProfit,
       totalPendingDebt,
@@ -241,7 +280,7 @@ export default function App() {
       totalWithdrawn,
       availableToWithdraw
     };
-  }, [sales, clients, products, withdrawals, salaryPercentage]);
+  }, [sales, clients, products, withdrawals, salaryPercentage, stockEntries, expenses]);
 
   // CATEGORÍAS DE INVENTARIO CORREGIDAS
   const inventoryCategories = useMemo(() => {
@@ -838,6 +877,9 @@ export default function App() {
             setEntryTransferenciaInput={setEntryTransferenciaInput}
             handleRegisterStockEntry={handleRegisterStockEntry}
             handleDeleteStockEntry={handleDeleteStockEntry}
+            expenses={expenses}
+            onAddExpense={handleAddExpense}
+            onDeleteExpense={handleDeleteExpense}
           />
         )}
 
