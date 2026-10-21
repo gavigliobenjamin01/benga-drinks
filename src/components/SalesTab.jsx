@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { toPng } from 'html-to-image';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import {
   Search,
   Plus,
@@ -15,7 +17,9 @@ import {
   Receipt,
   Image as ImageIcon,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Settings,
+  Save
 } from 'lucide-react';
 import { formatCurrency } from '../utils';
 
@@ -49,6 +53,11 @@ export default function SalesTab({
 
   // 🚀 ESTADO PARA CONTROLAR QUÉ COMBOS TIENEN EL DESPLEGABLE ABIERTO EN EL CARRITO
   const [expandedCombos, setExpandedCombos] = useState({});
+
+  // 🎮 ESTADOS PARA EL MODAL ESTILO STEAM WORKSHOP
+  const [steamDetailItem, setSteamDetailItem] = useState(null);
+  const [isEditingSteamDesc, setIsEditingSteamDesc] = useState(false);
+  const [steamDescInput, setSteamDescInput] = useState('');
 
   // TICKET VISUAL
   const [ticketModalData, setTicketModalData] = useState(null);
@@ -90,6 +99,35 @@ export default function SalesTab({
       const pObj = products.find((p) => p.id === comp.productId);
       return !pObj || getSafeStock(pObj.stock) < Number(comp.quantity || 1);
     });
+  };
+
+  // 🎮 ABRIR MODAL STEAM WORKSHOP
+  const openSteamDetailModal = (item) => {
+    setSteamDetailItem(item);
+    setSteamDescInput(item.description || item.raw?.description || '');
+    setIsEditingSteamDesc(false);
+  };
+
+  // 🎮 GUARDAR DESCRIPCIÓN EN FIREBASE DIRECTO
+  const handleSaveSteamDescription = async () => {
+    if (!steamDetailItem) return;
+
+    const collectionName = steamDetailItem.isPromo ? 'promos' : 'products';
+
+    try {
+      const trimmed = steamDescInput.trim();
+      await updateDoc(doc(db, collectionName, steamDetailItem.id), {
+        description: trimmed
+      });
+
+      // Actualizar vista al instante
+      setSteamDetailItem((prev) => ({ ...prev, description: trimmed }));
+      setIsEditingSteamDesc(false);
+      notify('✨ Descripción guardada en Firebase');
+    } catch (err) {
+      console.error('Error al guardar la descripción:', err);
+      notify('⚠️ Error al guardar en la base de datos');
+    }
   };
 
   // CATEGORÍAS
@@ -152,14 +190,13 @@ export default function SalesTab({
     return cart.some((item) => item.type === 'promo' || item.isPromo || (item.name || '').toLowerCase().includes('combo'));
   }, [cart]);
 
-  // APLICAR DESCUENTO P. COMBO DINÁMICAMENTE (POR COMBO EN CARRITO O POR CANTIDAD >= 2)
+  // APLICAR DESCUENTO P. COMBO DINÁMICAMENTE
   const processedCart = useMemo(() => {
     return cart.map((item) => {
       if (item.type === 'product' || !item.isPromo) {
         const comboP = Number(item.raw?.comboPrice || item.comboPrice || 0);
         const normalP = Number(item.raw?.sellPrice || item.raw?.price || item.sellPrice || item.price || 0);
 
-        // Aplica precio combo si hay un combo en el carrito O si lleva 2 o más unidades
         const isDiscountApplied = comboP > 0 && (hasPromoInCart || item.qty >= 2);
         const effectivePrice = isDiscountApplied ? comboP : normalP;
 
@@ -382,7 +419,7 @@ export default function SalesTab({
       notify('📸 Imagen del ticket descargada');
     } catch (err) {
       notify('⚠️ No se pudo generar la imagen');
-    } finally {
+    } flex: {
       setIsGeneratingImage(false);
     }
   };
@@ -546,12 +583,30 @@ export default function SalesTab({
                         </>
                       )}
                     </div>
-                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition shadow ${
-                      outOfStock
-                        ? 'bg-slate-800/40 text-slate-600'
-                        : 'bg-slate-800 group-hover:bg-fuchsia-500 group-hover:text-slate-950 text-slate-300'
-                    }`}>
-                      <Plus className="w-3.5 h-3.5 stroke-[3]" />
+
+                    {/* 🎮 CONTROLES DE LA TARJETA: LUPA TIPO STEAM + MÁS */}
+                    <div className="flex items-center gap-1">
+                      {/* BOTÓN LUPA ESTILO STEAM WORKSHOP */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openSteamDetailModal(item);
+                        }}
+                        className="w-6 h-6 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition border border-slate-700/60"
+                        title="Ver descripción / detalles"
+                      >
+                        <Search className="w-3 h-3 stroke-[2.5]" />
+                      </button>
+
+                      {/* BOTÓN MÁS (+) */}
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition shadow ${
+                        outOfStock
+                          ? 'bg-slate-800/40 text-slate-600'
+                          : 'bg-slate-800 group-hover:bg-fuchsia-500 group-hover:text-slate-950 text-slate-300'
+                      }`}>
+                        <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -879,6 +934,136 @@ export default function SalesTab({
         </div>
       </div>
 
+      {/* 🎮 MODAL ESTILO STEAM WORKSHOP (FOTO GRANDE + SETTINGS ARRIBA A LA DERECHA) */}
+      {steamDetailItem && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl space-y-0 relative animate-fadeIn">
+            
+            {/* 🖼️ FOTO EN GRANDE CON CERRAR Y SETTINGS ARRIBA A LA DERECHA */}
+            <div className="h-60 bg-slate-950 relative flex items-center justify-center border-b border-slate-800">
+              {steamDetailItem.imageUrl ? (
+                <img
+                  src={getOptimizedImageUrl(steamDetailItem.imageUrl)}
+                  alt={steamDetailItem.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="text-slate-700 flex flex-col items-center gap-1">
+                  <ImageIcon className="w-12 h-12 stroke-[1.5]" />
+                  <span className="text-xs uppercase font-bold text-slate-600">Sin Foto</span>
+                </div>
+              )}
+
+              {/* BOTÓN CERRAR (ARRIBA IZQUIERDA) */}
+              <button
+                type="button"
+                onClick={() => setSteamDetailItem(null)}
+                className="absolute top-3 left-3 bg-slate-950/80 hover:bg-slate-950 text-slate-300 p-2 rounded-full border border-slate-800 backdrop-blur-md transition z-10"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              {/* ⚙️ BOTÓN DE SETTINGS / TUERCA (ARRIBA A LA DERECHA DE LA FOTO) */}
+              <button
+                type="button"
+                onClick={() => setIsEditingSteamDesc(!isEditingSteamDesc)}
+                className={`absolute top-3 right-3 p-2.5 rounded-full border backdrop-blur-md transition shadow-lg z-10 ${
+                  isEditingSteamDesc
+                    ? 'bg-fuchsia-500 text-slate-950 border-fuchsia-400 font-bold'
+                    : 'bg-slate-950/80 text-slate-300 hover:text-white border-slate-800'
+                }`}
+                title="Editar descripción"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 📄 DETALLE ABAJO DE LA FOTO */}
+            <div className="p-5 space-y-4 text-xs">
+              <div className="flex justify-between items-start border-b border-slate-800 pb-3">
+                <div>
+                  <h2 className="text-base font-bold text-white">{steamDetailItem.name}</h2>
+                  <span className="text-[10px] uppercase font-bold text-fuchsia-400">
+                    {steamDetailItem.isPromo ? '🔥 Promo / Combo' : (steamDetailItem.brand || steamDetailItem.category)}
+                  </span>
+                </div>
+                <span className="font-mono text-lg font-black text-emerald-400">
+                  {formatCurrency(
+                    steamDetailItem.isPromo
+                      ? (steamDetailItem.price || steamDetailItem.comboPrice || 0)
+                      : (steamDetailItem.sellPrice || steamDetailItem.price || 0)
+                  )}
+                </span>
+              </div>
+
+              {/* ÁREA DE DESCRIPCIÓN (MODO LECTURA O MODO EDICIÓN) */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <span>Descripción / Detalles</span>
+                  {isEditingSteamDesc && (
+                    <span className="text-fuchsia-400 text-[10px] font-normal">Modo Edición ✏️</span>
+                  )}
+                </div>
+
+                {isEditingSteamDesc ? (
+                  /* MODO EDICIÓN DIRECTO AL TOCAR SETTINGS */
+                  <div className="space-y-2">
+                    <textarea
+                      rows="4"
+                      value={steamDescInput}
+                      onChange={(e) => setSteamDescInput(e.target.value)}
+                      placeholder="Escribí acá la descripción (Ej: Rinde para 3 personas / 4 jarras, tomar con mucho hielo)..."
+                      className="w-full bg-slate-950 border border-fuchsia-500/60 rounded-2xl p-3 text-white text-xs focus:outline-none focus:border-fuchsia-500 shadow-inner"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingSteamDesc(false)}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 font-bold"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSaveSteamDescription}
+                        className="px-4 py-1.5 rounded-xl bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 font-bold flex items-center gap-1 shadow-md shadow-fuchsia-500/20"
+                      >
+                        <Save className="w-3.5 h-3.5" /> Guardar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* MODO LECTURA NORMAL */
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-slate-300 leading-relaxed min-h-[80px]">
+                    {steamDetailItem.description ? (
+                      <p className="whitespace-pre-line text-slate-200">{steamDetailItem.description}</p>
+                    ) : (
+                      <p className="text-slate-600 italic">
+                        Sin descripción cargada. Tocá el ícono ⚙️ arriba a la derecha de la foto para escribir la descripción.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* BOTÓN SUMAR AL CARRITO */}
+              <button
+                type="button"
+                disabled={steamDetailItem.isPromo ? isPromoOutOfStock(steamDetailItem) : getSafeStock(steamDetailItem.stock) <= 0}
+                onClick={() => {
+                  addToCart(steamDetailItem);
+                  setSteamDetailItem(null);
+                }}
+                className="w-full bg-fuchsia-500 hover:bg-fuchsia-400 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-bold py-3.5 rounded-2xl transition shadow-lg shadow-fuchsia-500/20 flex items-center justify-center gap-2 text-xs"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" /> Agregar al Carrito
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* MODAL TICKET FOTO */}
       {ticketModalData && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
@@ -900,7 +1085,7 @@ export default function SalesTab({
                 <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-800">
                   <div className="font-black text-base tracking-wider text-fuchsia-400">BENGA DRINKS</div>
                   <div className="text-[10px] text-slate-400 uppercase">Venta de Bebidas</div>
-                  <div className="text-[9px] text-slate-500 pt-1">Ticket #{ticketModalData.ticketId} • {ticketModalData.date}</div>
+                  <div className="text-[9px] text-slate-500 pt-1">Ticket #{ticketModalData.ticketId} - {ticketModalData.date}</div>
                 </div>
 
                 <div className="space-y-1 text-[11px] pb-3 border-b border-dashed border-slate-800">
