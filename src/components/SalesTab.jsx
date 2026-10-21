@@ -23,7 +23,6 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '../utils';
 
-// 🚀 Usar la URL directa sin proxies intermedios
 const getOptimizedImageUrl = (url) => {
   if (!url || typeof url !== 'string') return '';
   return url.trim();
