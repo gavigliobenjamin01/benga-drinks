@@ -934,49 +934,62 @@ export default function SalesTab({
         </div>
       </div>
 
-      {/* 🎮 MODAL ESTILO STEAM WORKSHOP (FOTO GRANDE + SETTINGS ARRIBA A LA DERECHA) */}
-      {steamDetailItem && (
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl space-y-0 relative animate-fadeIn">
-            
-            {/* 🖼️ FOTO EN GRANDE CON CERRAR Y SETTINGS ARRIBA A LA DERECHA */}
-            <div className="h-60 bg-slate-950 relative flex items-center justify-center border-b border-slate-800">
-              {steamDetailItem.imageUrl ? (
-                <img
-                  src={getOptimizedImageUrl(steamDetailItem.imageUrl)}
-                  alt={steamDetailItem.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="text-slate-700 flex flex-col items-center gap-1">
-                  <ImageIcon className="w-12 h-12 stroke-[1.5]" />
-                  <span className="text-xs uppercase font-bold text-slate-600">Sin Foto</span>
-                </div>
-              )}
+     {/* 🖼️ FOTO EN GRANDE CON MANEJO SEGURO DE ERRORES */}
+<div className="h-60 bg-slate-950 relative flex items-center justify-center border-b border-slate-800">
+  {steamDetailItem.imageUrl ? (
+    <img
+      src={getOptimizedImageUrl(steamDetailItem.imageUrl)}
+      alt={steamDetailItem.name}
+      loading="lazy"
+      onError={(e) => {
+        // 1. Si falla el proxy wsrv.nl, intenta usar la URL original limpia
+        if (e.target.src !== steamDetailItem.imageUrl) {
+          e.target.src = steamDetailItem.imageUrl;
+        } else {
+          // 2. Si la URL original tampoco carga, oculta la imagen rota para que no afee el modal
+          e.target.style.display = 'none';
+          if (e.target.nextElementSibling) {
+            e.target.nextElementSibling.style.display = 'flex';
+          }
+        }
+      }}
+      className="w-full h-full object-cover"
+    />
+  ) : null}
 
-              {/* BOTÓN CERRAR (ARRIBA IZQUIERDA) */}
-              <button
-                type="button"
-                onClick={() => setSteamDetailItem(null)}
-                className="absolute top-3 left-3 bg-slate-950/80 hover:bg-slate-950 text-slate-300 p-2 rounded-full border border-slate-800 backdrop-blur-md transition z-10"
-              >
-                <X className="w-4 h-4" />
-              </button>
+  {/* Contenedor de respaldo ("Sin Foto") si no hay imagen o si falla la carga */}
+  <div
+    className={`text-slate-700 flex flex-col items-center gap-1 ${
+      steamDetailItem.imageUrl ? 'hidden' : 'flex'
+    }`}
+  >
+    <ImageIcon className="w-12 h-12 stroke-[1.5]" />
+    <span className="text-xs uppercase font-bold text-slate-600">Sin Foto</span>
+  </div>
 
-              {/* ⚙️ BOTÓN DE SETTINGS / TUERCA (ARRIBA A LA DERECHA DE LA FOTO) */}
-              <button
-                type="button"
-                onClick={() => setIsEditingSteamDesc(!isEditingSteamDesc)}
-                className={`absolute top-3 right-3 p-2.5 rounded-full border backdrop-blur-md transition shadow-lg z-10 ${
-                  isEditingSteamDesc
-                    ? 'bg-fuchsia-500 text-slate-950 border-fuchsia-400 font-bold'
-                    : 'bg-slate-950/80 text-slate-300 hover:text-white border-slate-800'
-                }`}
-                title="Editar descripción"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-            </div>
+  {/* BOTÓN CERRAR (ARRIBA IZQUIERDA) */}
+  <button
+    type="button"
+    onClick={() => setSteamDetailItem(null)}
+    className="absolute top-3 left-3 bg-slate-950/80 hover:bg-slate-950 text-slate-300 p-2 rounded-full border border-slate-800 backdrop-blur-md transition z-10"
+  >
+    <X className="w-4 h-4" />
+  </button>
+
+  {/* ⚙️ BOTÓN DE SETTINGS / TUERCA (ARRIBA A LA DERECHA) */}
+  <button
+    type="button"
+    onClick={() => setIsEditingSteamDesc(!isEditingSteamDesc)}
+    className={`absolute top-3 right-3 p-2.5 rounded-full border backdrop-blur-md transition shadow-lg z-10 ${
+      isEditingSteamDesc
+        ? 'bg-fuchsia-500 text-slate-950 border-fuchsia-400 font-bold'
+        : 'bg-slate-950/80 text-slate-300 hover:text-white border-slate-800'
+    }`}
+    title="Editar descripción"
+  >
+    <Settings className="w-4 h-4" />
+  </button>
+</div>
 
             {/* 📄 DETALLE ABAJO DE LA FOTO */}
             <div className="p-5 space-y-4 text-xs">
