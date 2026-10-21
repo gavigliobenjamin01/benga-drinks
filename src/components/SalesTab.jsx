@@ -23,10 +23,10 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '../utils';
 
-// 🚀 FUNCIÓN DE OPTIMIZACIÓN DE IMÁGENES AL VUELO
+// 🚀 Usar la URL directa sin proxies intermedios
 const getOptimizedImageUrl = (url) => {
-  if (!url) return '';
-  return `https://wsrv.nl/?url=${encodeURIComponent(url)}&w=400&output=webp&q=75`;
+  if (!url || typeof url !== 'string') return '';
+  return url.trim();
 };
 
 export default function SalesTab({
@@ -934,30 +934,25 @@ export default function SalesTab({
         </div>
       </div>
 
-     {/* 🖼️ FOTO EN GRANDE CON MANEJO SEGURO DE ERRORES */}
+    {/* 🖼️ FOTO EN GRANDE CON RESPALDO DE ERRORES */}
 <div className="h-60 bg-slate-950 relative flex items-center justify-center border-b border-slate-800">
   {steamDetailItem.imageUrl ? (
     <img
       src={getOptimizedImageUrl(steamDetailItem.imageUrl)}
       alt={steamDetailItem.name}
-      loading="lazy"
       onError={(e) => {
-        // 1. Si falla el proxy wsrv.nl, intenta usar la URL original limpia
-        if (e.target.src !== steamDetailItem.imageUrl) {
-          e.target.src = steamDetailItem.imageUrl;
-        } else {
-          // 2. Si la URL original tampoco carga, oculta la imagen rota para que no afee el modal
-          e.target.style.display = 'none';
-          if (e.target.nextElementSibling) {
-            e.target.nextElementSibling.style.display = 'flex';
-          }
+        // Si el link de la foto está roto o bloqueado por el servidor original,
+        // oculta la imagen rota y muestra la tarjeta limpia "Sin Foto"
+        e.target.style.display = 'none';
+        if (e.target.nextElementSibling) {
+          e.target.nextElementSibling.style.display = 'flex';
         }
       }}
       className="w-full h-full object-cover"
     />
   ) : null}
 
-  {/* Contenedor de respaldo ("Sin Foto") si no hay imagen o si falla la carga */}
+  {/* Contenedor de respaldo ("Sin Foto") */}
   <div
     className={`text-slate-700 flex flex-col items-center gap-1 ${
       steamDetailItem.imageUrl ? 'hidden' : 'flex'
