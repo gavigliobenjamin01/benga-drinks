@@ -418,7 +418,7 @@ export default function SalesTab({
       notify('📸 Imagen del ticket descargada');
     } catch (err) {
       notify('⚠️ No se pudo generar la imagen');
-    } flex: {
+    } finally {
       setIsGeneratingImage(false);
     }
   };
@@ -532,20 +532,25 @@ export default function SalesTab({
                       src={getOptimizedImageUrl(item.imageUrl)}
                       alt={item.name}
                       loading="lazy"
-                      decoding="async"
-                      crossOrigin="anonymous"
                       onError={(e) => {
-                        e.target.onerror = null; 
-                        e.target.src = item.imageUrl;
+                        e.target.style.display = 'none';
+                        if (e.target.nextElementSibling) {
+                          e.target.nextElementSibling.style.display = 'flex';
+                        }
                       }}
                       className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
                     />
-                  ) : (
-                    <div className="text-slate-700 flex flex-col items-center gap-1">
-                      <ImageIcon className="w-8 h-8 stroke-[1.5]" />
-                      <span className="text-[9px] uppercase font-bold text-slate-600">Sin Foto</span>
-                    </div>
-                  )}
+                  ) : null}
+
+                  <div
+                    className={`text-slate-700 flex flex-col items-center gap-1 ${
+                      item.imageUrl ? 'hidden' : 'flex'
+                    }`}
+                  >
+                    <ImageIcon className="w-8 h-8 stroke-[1.5]" />
+                    <span className="text-[9px] uppercase font-bold text-slate-600">Sin Foto</span>
+                  </div>
+
                   <span className="absolute top-1.5 left-1.5 bg-slate-950/80 backdrop-blur-md px-2 py-0.5 rounded-md text-[9px] font-bold uppercase text-fuchsia-400 border border-slate-800 z-10">
                     {item.isPromo ? '🔥 Promo' : item.brand}
                   </span>
@@ -933,57 +938,59 @@ export default function SalesTab({
         </div>
       </div>
 
-    {/* 🖼️ FOTO EN GRANDE CON RESPALDO DE ERRORES */}
-<div className="h-60 bg-slate-950 relative flex items-center justify-center border-b border-slate-800">
-  {steamDetailItem.imageUrl ? (
-    <img
-      src={getOptimizedImageUrl(steamDetailItem.imageUrl)}
-      alt={steamDetailItem.name}
-      onError={(e) => {
-        // Si el link de la foto está roto o bloqueado por el servidor original,
-        // oculta la imagen rota y muestra la tarjeta limpia "Sin Foto"
-        e.target.style.display = 'none';
-        if (e.target.nextElementSibling) {
-          e.target.nextElementSibling.style.display = 'flex';
-        }
-      }}
-      className="w-full h-full object-cover"
-    />
-  ) : null}
+      {/* 🎮 MODAL ESTILO STEAM WORKSHOP (CORREGIDO) */}
+      {steamDetailItem && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl space-y-0 relative animate-fadeIn">
+            {/* 🖼️ FOTO EN GRANDE CON RESPALDO DE ERRORES */}
+            <div className="h-60 bg-slate-950 relative flex items-center justify-center border-b border-slate-800">
+              {steamDetailItem.imageUrl ? (
+                <img
+                  src={getOptimizedImageUrl(steamDetailItem.imageUrl)}
+                  alt={steamDetailItem.name}
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    if (e.target.nextElementSibling) {
+                      e.target.nextElementSibling.style.display = 'flex';
+                    }
+                  }}
+                  className="w-full h-full object-cover"
+                />
+              ) : null}
 
-  {/* Contenedor de respaldo ("Sin Foto") */}
-  <div
-    className={`text-slate-700 flex flex-col items-center gap-1 ${
-      steamDetailItem.imageUrl ? 'hidden' : 'flex'
-    }`}
-  >
-    <ImageIcon className="w-12 h-12 stroke-[1.5]" />
-    <span className="text-xs uppercase font-bold text-slate-600">Sin Foto</span>
-  </div>
+              {/* Contenedor de respaldo ("Sin Foto") */}
+              <div
+                className={`text-slate-700 flex flex-col items-center gap-1 ${
+                  steamDetailItem.imageUrl ? 'hidden' : 'flex'
+                }`}
+              >
+                <ImageIcon className="w-12 h-12 stroke-[1.5]" />
+                <span className="text-xs uppercase font-bold text-slate-600">Sin Foto</span>
+              </div>
 
-  {/* BOTÓN CERRAR (ARRIBA IZQUIERDA) */}
-  <button
-    type="button"
-    onClick={() => setSteamDetailItem(null)}
-    className="absolute top-3 left-3 bg-slate-950/80 hover:bg-slate-950 text-slate-300 p-2 rounded-full border border-slate-800 backdrop-blur-md transition z-10"
-  >
-    <X className="w-4 h-4" />
-  </button>
+              {/* BOTÓN CERRAR (ARRIBA IZQUIERDA) */}
+              <button
+                type="button"
+                onClick={() => setSteamDetailItem(null)}
+                className="absolute top-3 left-3 bg-slate-950/80 hover:bg-slate-950 text-slate-300 p-2 rounded-full border border-slate-800 backdrop-blur-md transition z-10"
+              >
+                <X className="w-4 h-4" />
+              </button>
 
-  {/* ⚙️ BOTÓN DE SETTINGS / TUERCA (ARRIBA A LA DERECHA) */}
-  <button
-    type="button"
-    onClick={() => setIsEditingSteamDesc(!isEditingSteamDesc)}
-    className={`absolute top-3 right-3 p-2.5 rounded-full border backdrop-blur-md transition shadow-lg z-10 ${
-      isEditingSteamDesc
-        ? 'bg-fuchsia-500 text-slate-950 border-fuchsia-400 font-bold'
-        : 'bg-slate-950/80 text-slate-300 hover:text-white border-slate-800'
-    }`}
-    title="Editar descripción"
-  >
-    <Settings className="w-4 h-4" />
-  </button>
-</div>
+              {/* ⚙️ BOTÓN DE SETTINGS / TUERCA (ARRIBA A LA DERECHA) */}
+              <button
+                type="button"
+                onClick={() => setIsEditingSteamDesc(!isEditingSteamDesc)}
+                className={`absolute top-3 right-3 p-2.5 rounded-full border backdrop-blur-md transition shadow-lg z-10 ${
+                  isEditingSteamDesc
+                    ? 'bg-fuchsia-500 text-slate-950 border-fuchsia-400 font-bold'
+                    : 'bg-slate-950/80 text-slate-300 hover:text-white border-slate-800'
+                }`}
+                title="Editar descripción"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            </div>
 
             {/* 📄 DETALLE ABAJO DE LA FOTO */}
             <div className="p-5 space-y-4 text-xs">
@@ -1066,7 +1073,6 @@ export default function SalesTab({
                 <Plus className="w-4 h-4 stroke-[3]" /> Agregar al Carrito
               </button>
             </div>
-
           </div>
         </div>
       )}
@@ -1092,7 +1098,9 @@ export default function SalesTab({
                 <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-800">
                   <div className="font-black text-base tracking-wider text-fuchsia-400">BENGA DRINKS</div>
                   <div className="text-[10px] text-slate-400 uppercase">Venta de Bebidas</div>
-                  <div className="text-[9px] text-slate-500 pt-1">Ticket #{ticketModalData.ticketId} - {ticketModalData.date}</div>
+                  <div className="text-[9px] text-slate-500 pt-1">
+                    Ticket #{ticketModalData.ticketId} - {ticketModalData.date}
+                  </div>
                 </div>
 
                 <div className="space-y-1 text-[11px] pb-3 border-b border-dashed border-slate-800">
