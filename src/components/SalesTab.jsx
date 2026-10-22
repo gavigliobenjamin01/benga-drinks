@@ -470,11 +470,10 @@ export default function SalesTab({
       link.click();
       notify('📸 Imagen del ticket descargada');
     } catch (err) {
-      notify('⚠️ No se pudo generar la imagen');
-    } flex {
-    } finally {
-      setIsGeneratingImage(false);
-    }
+  notify('⚠️ No se pudo generar la imagen');
+} finally {
+  setIsGeneratingImage(false);
+}
   };
 
   const handleShareImage = async () => {
