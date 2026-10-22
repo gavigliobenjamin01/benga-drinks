@@ -129,6 +129,75 @@ export default function SalesTab({
     }
   };
 
+  // 🧠 LÓGICA DE PROMOS SIMILARES POR BOTELLA (IGNORANDO ENERGIZANTES / MEZCLADORES)
+  const relatedPromos = useMemo(() => {
+    if (!steamDetailItem) return [];
+
+    // Palabras a ignorar para no vincular por mezcladores o adicionales
+    const IGNORED_MIXERS = [
+      'speed', 'coca', 'sprite', '7up', 'seven', 'red bull', 'monster',
+      'jugo', 'baggio', 'citric', 'hielo', 'vaso', 'tonica', 'tónica', 'energizante', 'gaseosa'
+    ];
+
+    let keyTerms = [];
+
+    // 1. Extraer marca si existe
+    if (steamDetailItem.brand && !IGNORED_MIXERS.some(m => steamDetailItem.brand.toLowerCase().includes(m))) {
+      keyTerms.push(steamDetailItem.brand.toLowerCase());
+    }
+
+    // 2. Extraer productos componentes si es un combo/promo
+    const itemComponents = steamDetailItem.items || steamDetailItem.raw?.items || [];
+    if (itemComponents.length > 0) {
+      itemComponents.forEach((comp) => {
+        const pObj = products.find((p) => p.id === (comp.productId || comp.id));
+        const pName = (pObj?.name || comp.name || '').toLowerCase();
+        const pBrand = (pObj?.brand || '').toLowerCase();
+
+        const isMixer = IGNORED_MIXERS.some((m) => pName.includes(m) || pBrand.includes(m));
+        if (!isMixer) {
+          if (pBrand && pBrand.length > 2) keyTerms.push(pBrand);
+          if (pName) {
+            // Limpiar palabras comunes
+            const mainWords = pName.split(/[\s,+/]+/).filter(w => w.length > 2 && !IGNORED_MIXERS.some(m => w.includes(m)));
+            keyTerms.push(...mainWords);
+          }
+        }
+      });
+    }
+
+    // 3. Extraer palabras clave del nombre del item
+    const itemNameWords = (steamDetailItem.name || '').toLowerCase().split(/[\s,+/]+/);
+    itemNameWords.forEach((w) => {
+      if (w.length > 2 && !IGNORED_MIXERS.some((m) => w.includes(m))) {
+        keyTerms.push(w);
+      }
+    });
+
+    // Filtrar duplicados
+    keyTerms = Array.from(new Set(keyTerms));
+
+    if (keyTerms.length === 0) return [];
+
+    // Filtrar promos que contengan la misma botella
+    return promos.filter((p) => {
+      // No mostrar la misma promo que está abierta
+      if (p.id === steamDetailItem.id && steamDetailItem.isPromo) return false;
+      if (p.active === false) return false;
+
+      const promoText = `${p.name || ''} ${p.description || ''}`.toLowerCase();
+      const promoItemsText = (p.items || []).map((comp) => {
+        const pObj = products.find((prod) => prod.id === comp.productId);
+        return `${pObj?.name || ''} ${pObj?.brand || ''}`;
+      }).join(' ').toLowerCase();
+
+      const fullPromoText = `${promoText} ${promoItemsText}`;
+
+      // Debe coincidir con al menos un término clave (la botella)
+      return keyTerms.some((term) => fullPromoText.includes(term));
+    });
+  }, [steamDetailItem, promos, products]);
+
   // CATEGORÍAS
   const categories = useMemo(() => {
     const cats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
@@ -938,12 +1007,13 @@ export default function SalesTab({
         </div>
       </div>
 
-      {/* 🎮 MODAL ESTILO STEAM WORKSHOP (CORREGIDO) */}
+      {/* 🎮 MODAL ESTILO STEAM WORKSHOP (CON PROMOS SIMILARES) */}
       {steamDetailItem && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl space-y-0 relative animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl space-y-0 relative animate-fadeIn max-h-[90vh] flex flex-col">
+            
             {/* 🖼️ FOTO EN GRANDE CON RESPALDO DE ERRORES */}
-            <div className="h-60 bg-slate-950 relative flex items-center justify-center border-b border-slate-800">
+            <div className="h-56 bg-slate-950 relative flex items-center justify-center border-b border-slate-800 flex-shrink-0">
               {steamDetailItem.imageUrl ? (
                 <img
                   src={getOptimizedImageUrl(steamDetailItem.imageUrl)}
@@ -993,7 +1063,7 @@ export default function SalesTab({
             </div>
 
             {/* 📄 DETALLE ABAJO DE LA FOTO */}
-            <div className="p-5 space-y-4 text-xs">
+            <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <div className="flex justify-between items-start border-b border-slate-800 pb-3">
                 <div>
                   <h2 className="text-base font-bold text-white">{steamDetailItem.name}</h2>
@@ -1023,10 +1093,10 @@ export default function SalesTab({
                   /* MODO EDICIÓN DIRECTO AL TOCAR SETTINGS */
                   <div className="space-y-2">
                     <textarea
-                      rows="4"
+                      rows="3"
                       value={steamDescInput}
                       onChange={(e) => setSteamDescInput(e.target.value)}
-                      placeholder="Escribí acá la descripción (Ej: Rinde para 3 personas / 4 jarras, tomar con mucho hielo)..."
+                      placeholder="Escribí acá la descripción (Ej: Rinde para 3 personas / 4 javras)..."
                       className="w-full bg-slate-950 border border-fuchsia-500/60 rounded-2xl p-3 text-white text-xs focus:outline-none focus:border-fuchsia-500 shadow-inner"
                     />
                     <div className="flex justify-end gap-2">
@@ -1048,7 +1118,7 @@ export default function SalesTab({
                   </div>
                 ) : (
                   /* MODO LECTURA NORMAL */
-                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-slate-300 leading-relaxed min-h-[80px]">
+                  <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 text-slate-300 leading-relaxed min-h-[60px]">
                     {steamDetailItem.description ? (
                       <p className="whitespace-pre-line text-slate-200">{steamDetailItem.description}</p>
                     ) : (
@@ -1059,6 +1129,44 @@ export default function SalesTab({
                   </div>
                 )}
               </div>
+
+              {/* 🌟 PROMOS SIMILARES POR BOTELLA */}
+              {relatedPromos.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-slate-800">
+                  <span className="text-[10px] font-bold text-fuchsia-400 uppercase tracking-wider block">
+                    🔥 Promos Similares
+                  </span>
+                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                    {relatedPromos.map((relPromo) => (
+                      <div
+                        key={relPromo.id}
+                        onClick={() => openSteamDetailModal({ ...relPromo, isPromo: true })}
+                        className="flex-shrink-0 w-32 bg-slate-950 border border-slate-800 hover:border-fuchsia-500/60 rounded-xl p-2 cursor-pointer transition flex flex-col justify-between group"
+                      >
+                        <div className="h-16 w-full bg-slate-900 rounded-lg overflow-hidden relative mb-1.5 flex items-center justify-center">
+                          {relPromo.imageUrl ? (
+                            <img
+                              src={getOptimizedImageUrl(relPromo.imageUrl)}
+                              alt={relPromo.name}
+                              className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
+                            />
+                          ) : (
+                            <ImageIcon className="w-5 h-5 text-slate-600" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-bold text-[10px] text-slate-100 truncate group-hover:text-fuchsia-300">
+                            {relPromo.name}
+                          </p>
+                          <span className="font-mono text-[10px] font-extrabold text-emerald-400 block">
+                            {formatCurrency(relPromo.price || relPromo.comboPrice || 0)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* BOTÓN SUMAR AL CARRITO */}
               <button
@@ -1073,6 +1181,7 @@ export default function SalesTab({
                 <Plus className="w-4 h-4 stroke-[3]" /> Agregar al Carrito
               </button>
             </div>
+
           </div>
         </div>
       )}
