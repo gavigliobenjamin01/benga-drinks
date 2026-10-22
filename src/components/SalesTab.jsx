@@ -110,7 +110,7 @@ export default function SalesTab({
     setIsEditingSteamDesc(false);
   };
 
-  // 🎮 GUARDAR CON VINCULACIÓN BIDIRECCIONAL (RECÍPROCA) EN FIREBASE
+ // 🎮 GUARDAR CON VINCULACIÓN EN GRUPO COMPLETO (TODAS CON TODAS)
   const handleSaveSteamDescription = async () => {
     if (!steamDetailItem) return;
 
@@ -120,44 +120,50 @@ export default function SalesTab({
       const trimmed = steamDescInput.trim();
       const originalIds = steamDetailItem.relatedPromoIds || steamDetailItem.raw?.relatedPromoIds || [];
 
-      // Identificar cuáles promos se vincularon nuevas y cuáles se desvincularon
-      const addedIds = selectedRelatedIds.filter((id) => !originalIds.includes(id));
+      // Promos que se desvincularon
       const removedIds = originalIds.filter((id) => !selectedRelatedIds.includes(id));
 
-      // 1. Guardar en la promo actual
+      // 1. Guardar la descripción y la lista en la promo actual
       await updateDoc(doc(db, collectionName, steamDetailItem.id), {
         description: trimmed,
         relatedPromoIds: selectedRelatedIds
       });
 
-      // 2. Si es una promo, vincular recíprocamente en las otras promos agregadas
+      // 2. Si es una promo, vincular automáticamente a TODAS las integrantes entre sí
       if (steamDetailItem.isPromo) {
-        const addPromises = addedIds.map((targetId) =>
-          updateDoc(doc(db, 'promos', targetId), {
-            relatedPromoIds: arrayUnion(steamDetailItem.id)
-          })
-        );
+        // Formamos el grupo completo (la promo actual + todas las seleccionadas)
+        const fullGroupIds = [steamDetailItem.id, ...selectedRelatedIds];
 
-        // 3. Desvincular recíprocamente en las promos quitadas
+        // A cada integrante del grupo le sumamos todos los demás integrantes
+        const groupPromises = fullGroupIds.map((memberId) => {
+          const otherMembers = fullGroupIds.filter((id) => id !== memberId);
+          if (otherMembers.length === 0) return Promise.resolve();
+
+          return updateDoc(doc(db, 'promos', memberId), {
+            relatedPromoIds: arrayUnion(...otherMembers)
+          });
+        });
+
+        // A las promos que desvinculaste, les quitamos la promo actual
         const removePromises = removedIds.map((targetId) =>
           updateDoc(doc(db, 'promos', targetId), {
             relatedPromoIds: arrayRemove(steamDetailItem.id)
           })
         );
 
-        await Promise.all([...addPromises, ...removePromises]);
+        await Promise.all([...groupPromises, ...removePromises]);
       }
 
-      // Actualizar vista local al instante
+      // Actualizar la vista local al instante
       setSteamDetailItem((prev) => ({
         ...prev,
         description: trimmed,
         relatedPromoIds: selectedRelatedIds
       }));
       setIsEditingSteamDesc(false);
-      notify('✨ Vinculación recíproca guardada en Firebase');
+      notify('✨ ¡Grupo completo de promos vinculado entre sí!');
     } catch (err) {
-      console.error('Error al guardar vinculación:', err);
+      console.error('Error al guardar vinculación en grupo:', err);
       notify('⚠️ Error al guardar en la base de datos');
     }
   };
