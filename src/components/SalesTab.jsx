@@ -19,7 +19,8 @@ import {
   ChevronDown,
   ChevronUp,
   Settings,
-  Save
+  Save,
+  Link2
 } from 'lucide-react';
 import { formatCurrency } from '../utils';
 
@@ -57,6 +58,7 @@ export default function SalesTab({
   const [steamDetailItem, setSteamDetailItem] = useState(null);
   const [isEditingSteamDesc, setIsEditingSteamDesc] = useState(false);
   const [steamDescInput, setSteamDescInput] = useState('');
+  const [selectedRelatedIds, setSelectedRelatedIds] = useState([]);
 
   // TICKET VISUAL
   const [ticketModalData, setTicketModalData] = useState(null);
@@ -104,10 +106,11 @@ export default function SalesTab({
   const openSteamDetailModal = (item) => {
     setSteamDetailItem(item);
     setSteamDescInput(item.description || item.raw?.description || '');
+    setSelectedRelatedIds(item.relatedPromoIds || item.raw?.relatedPromoIds || []);
     setIsEditingSteamDesc(false);
   };
 
-  // 🎮 GUARDAR DESCRIPCIÓN EN FIREBASE DIRECTO
+  // 🎮 GUARDAR DESCRIPCIÓN Y PROMOS VINCULADAS EN FIREBASE
   const handleSaveSteamDescription = async () => {
     if (!steamDetailItem) return;
 
@@ -116,87 +119,43 @@ export default function SalesTab({
     try {
       const trimmed = steamDescInput.trim();
       await updateDoc(doc(db, collectionName, steamDetailItem.id), {
-        description: trimmed
+        description: trimmed,
+        relatedPromoIds: selectedRelatedIds
       });
 
-      // Actualizar vista al instante
-      setSteamDetailItem((prev) => ({ ...prev, description: trimmed }));
+      // Actualizar vista local al instante
+      setSteamDetailItem((prev) => ({
+        ...prev,
+        description: trimmed,
+        relatedPromoIds: selectedRelatedIds
+      }));
       setIsEditingSteamDesc(false);
-      notify('✨ Descripción guardada en Firebase');
+      notify('✨ Cambios guardados en Firebase');
     } catch (err) {
-      console.error('Error al guardar la descripción:', err);
+      console.error('Error al guardar:', err);
       notify('⚠️ Error al guardar en la base de datos');
     }
   };
 
-  // 🧠 LÓGICA DE PROMOS SIMILARES POR BOTELLA (IGNORANDO ENERGIZANTES / MEZCLADORES)
-  const relatedPromos = useMemo(() => {
+  // TOGGLE VINCULACIÓN DE PROMOS MANUALMENTE
+  const toggleRelatedPromo = (promoId) => {
+    setSelectedRelatedIds((prev) =>
+      prev.includes(promoId)
+        ? prev.filter((id) => id !== promoId)
+        : [...prev, promoId]
+    );
+  };
+
+  // PROMOS SIMILARES SELECCIONADAS MANUALMENTE
+  const activeRelatedPromos = useMemo(() => {
     if (!steamDetailItem) return [];
-
-    // Palabras a ignorar para no vincular por mezcladores o adicionales
-    const IGNORED_MIXERS = [
-      'speed', 'coca', 'sprite', '7up', 'seven', 'red bull', 'monster',
-      'jugo', 'baggio', 'citric', 'hielo', 'vaso', 'tonica', 'tónica', 'energizante', 'gaseosa'
-    ];
-
-    let keyTerms = [];
-
-    // 1. Extraer marca si existe
-    if (steamDetailItem.brand && !IGNORED_MIXERS.some(m => steamDetailItem.brand.toLowerCase().includes(m))) {
-      keyTerms.push(steamDetailItem.brand.toLowerCase());
-    }
-
-    // 2. Extraer productos componentes si es un combo/promo
-    const itemComponents = steamDetailItem.items || steamDetailItem.raw?.items || [];
-    if (itemComponents.length > 0) {
-      itemComponents.forEach((comp) => {
-        const pObj = products.find((p) => p.id === (comp.productId || comp.id));
-        const pName = (pObj?.name || comp.name || '').toLowerCase();
-        const pBrand = (pObj?.brand || '').toLowerCase();
-
-        const isMixer = IGNORED_MIXERS.some((m) => pName.includes(m) || pBrand.includes(m));
-        if (!isMixer) {
-          if (pBrand && pBrand.length > 2) keyTerms.push(pBrand);
-          if (pName) {
-            // Limpiar palabras comunes
-            const mainWords = pName.split(/[\s,+/]+/).filter(w => w.length > 2 && !IGNORED_MIXERS.some(m => w.includes(m)));
-            keyTerms.push(...mainWords);
-          }
-        }
-      });
-    }
-
-    // 3. Extraer palabras clave del nombre del item
-    const itemNameWords = (steamDetailItem.name || '').toLowerCase().split(/[\s,+/]+/);
-    itemNameWords.forEach((w) => {
-      if (w.length > 2 && !IGNORED_MIXERS.some((m) => w.includes(m))) {
-        keyTerms.push(w);
-      }
-    });
-
-    // Filtrar duplicados
-    keyTerms = Array.from(new Set(keyTerms));
-
-    if (keyTerms.length === 0) return [];
-
-    // Filtrar promos que contengan la misma botella
-    return promos.filter((p) => {
-      // No mostrar la misma promo que está abierta
-      if (p.id === steamDetailItem.id && steamDetailItem.isPromo) return false;
-      if (p.active === false) return false;
-
-      const promoText = `${p.name || ''} ${p.description || ''}`.toLowerCase();
-      const promoItemsText = (p.items || []).map((comp) => {
-        const pObj = products.find((prod) => prod.id === comp.productId);
-        return `${pObj?.name || ''} ${pObj?.brand || ''}`;
-      }).join(' ').toLowerCase();
-
-      const fullPromoText = `${promoText} ${promoItemsText}`;
-
-      // Debe coincidir con al menos un término clave (la botella)
-      return keyTerms.some((term) => fullPromoText.includes(term));
-    });
-  }, [steamDetailItem, promos, products]);
+    const ids = steamDetailItem.relatedPromoIds || steamDetailItem.raw?.relatedPromoIds || [];
+    if (!ids || ids.length === 0) return [];
+    
+    return promos.filter(
+      (p) => ids.includes(p.id) && p.id !== steamDetailItem.id && p.active !== false
+    );
+  }, [steamDetailItem, promos]);
 
   // CATEGORÍAS
   const categories = useMemo(() => {
@@ -1007,7 +966,7 @@ export default function SalesTab({
         </div>
       </div>
 
-      {/* 🎮 MODAL ESTILO STEAM WORKSHOP (CON PROMOS SIMILARES) */}
+      {/* 🎮 MODAL ESTILO STEAM WORKSHOP (CON VINCULACIÓN MANUAL Y BLOQUEO) */}
       {steamDetailItem && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl space-y-0 relative animate-fadeIn max-h-[90vh] flex flex-col">
@@ -1056,7 +1015,7 @@ export default function SalesTab({
                     ? 'bg-fuchsia-500 text-slate-950 border-fuchsia-400 font-bold'
                     : 'bg-slate-950/80 text-slate-300 hover:text-white border-slate-800'
                 }`}
-                title="Editar descripción"
+                title="Editar descripción y vinculaciones"
               >
                 <Settings className="w-4 h-4" />
               </button>
@@ -1080,64 +1039,124 @@ export default function SalesTab({
                 </span>
               </div>
 
-              {/* ÁREA DE DESCRIPCIÓN (MODO LECTURA O MODO EDICIÓN) */}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  <span>Descripción / Detalles</span>
-                  {isEditingSteamDesc && (
-                    <span className="text-fuchsia-400 text-[10px] font-normal">Modo Edición ✏️</span>
-                  )}
-                </div>
-
-                {isEditingSteamDesc ? (
-                  /* MODO EDICIÓN DIRECTO AL TOCAR SETTINGS */
-                  <div className="space-y-2">
+              {/* ÁREA DE DESCRIPCIÓN Y CONFIGURACIÓN */}
+              {isEditingSteamDesc ? (
+                /* MODO EDICIÓN DIRECTO AL TOCAR SETTINGS */
+                <div className="space-y-3 animate-fadeIn">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                      Descripción / Detalles:
+                    </label>
                     <textarea
                       rows="3"
                       value={steamDescInput}
                       onChange={(e) => setSteamDescInput(e.target.value)}
-                      placeholder="Escribí acá la descripción (Ej: Rinde para 3 personas / 4 javras)..."
+                      placeholder="Escribí acá la descripción (Ej: Rinde para 3 personas / 4 jarras)..."
                       className="w-full bg-slate-950 border border-fuchsia-500/60 rounded-2xl p-3 text-white text-xs focus:outline-none focus:border-fuchsia-500 shadow-inner"
                     />
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsEditingSteamDesc(false)}
-                        className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 font-bold"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSaveSteamDescription}
-                        className="px-4 py-1.5 rounded-xl bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 font-bold flex items-center gap-1 shadow-md shadow-fuchsia-500/20"
-                      >
-                        <Save className="w-3.5 h-3.5" /> Guardar
-                      </button>
+                  </div>
+
+                  {/* 🔗 SELECCIÓN MANUAL DE PROMOS SIMILARES CON BLOQUEO */}
+                  <div className="space-y-1.5 pt-2 border-t border-slate-800">
+                    <label className="text-[10px] font-bold text-fuchsia-400 uppercase tracking-wider flex items-center gap-1">
+                      <Link2 className="w-3.5 h-3.5" /> Vincular Promos Similares a Sugerir:
+                    </label>
+                    <p className="text-[10px] text-slate-400">
+                      Seleccioná las promos que querés recomendar cuando se abra esta ficha.
+                    </p>
+
+                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1 border border-slate-800 rounded-2xl p-2 bg-slate-950/80">
+                      {promos.map((pr) => {
+                        const isCurrent = pr.id === steamDetailItem.id;
+                        const isSelected = selectedRelatedIds.includes(pr.id);
+
+                        if (isCurrent) {
+                          return (
+                            <div
+                              key={pr.id}
+                              className="p-2 rounded-xl bg-slate-900/40 border border-slate-800/50 opacity-40 flex items-center justify-between text-[11px] cursor-not-allowed select-none"
+                            >
+                              <span className="text-slate-500 font-medium truncate">
+                                {pr.name}
+                              </span>
+                              <span className="text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-bold">
+                                🚫 Promo Actual
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <button
+                            key={pr.id}
+                            type="button"
+                            onClick={() => toggleRelatedPromo(pr.id)}
+                            className={`w-full p-2 rounded-xl border text-left transition flex items-center justify-between text-[11px] ${
+                              isSelected
+                                ? 'bg-fuchsia-500/20 border-fuchsia-500 text-fuchsia-300 font-bold'
+                                : 'bg-slate-900 border-slate-800/80 text-slate-300 hover:border-slate-700'
+                            }`}
+                          >
+                            <span className="truncate pr-2">{pr.name}</span>
+                            <span
+                              className={`text-[10px] px-2 py-0.5 rounded-lg font-bold whitespace-nowrap ${
+                                isSelected
+                                  ? 'bg-fuchsia-500 text-slate-950'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {isSelected ? '✓ Vinculada' : '+ Agregar'}
+                            </span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
-                ) : (
-                  /* MODO LECTURA NORMAL */
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingSteamDesc(false)}
+                      className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 font-bold hover:bg-slate-700"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveSteamDescription}
+                      className="px-4 py-1.5 rounded-xl bg-fuchsia-500 hover:bg-fuchsia-400 text-slate-950 font-bold flex items-center gap-1 shadow-md shadow-fuchsia-500/20"
+                    >
+                      <Save className="w-3.5 h-3.5" /> Guardar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* MODO LECTURA NORMAL */
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    <span>Descripción / Detalles</span>
+                  </div>
+
                   <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 text-slate-300 leading-relaxed min-h-[60px]">
                     {steamDetailItem.description ? (
                       <p className="whitespace-pre-line text-slate-200">{steamDetailItem.description}</p>
                     ) : (
                       <p className="text-slate-600 italic">
-                        Sin descripción cargada. Tocá el ícono ⚙️ arriba a la derecha de la foto para escribir la descripción.
+                        Sin descripción cargada. Tocá el ícono ⚙️ arriba a la derecha de la foto para escribir la descripción o vincular promos.
                       </p>
                     )}
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
-              {/* 🌟 PROMOS SIMILARES POR BOTELLA */}
-              {relatedPromos.length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-slate-800">
+              {/* 🌟 PROMOS SIMILARES VINCULADAS MANUALMENTE */}
+              {!isEditingSteamDesc && activeRelatedPromos.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-slate-800 animate-fadeIn">
                   <span className="text-[10px] font-bold text-fuchsia-400 uppercase tracking-wider block">
                     🔥 Promos Similares
                   </span>
                   <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-                    {relatedPromos.map((relPromo) => (
+                    {activeRelatedPromos.map((relPromo) => (
                       <div
                         key={relPromo.id}
                         onClick={() => openSteamDetailModal({ ...relPromo, isPromo: true })}
