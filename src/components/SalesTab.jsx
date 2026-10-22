@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { toPng } from 'html-to-image';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { db } from '../firebase';
 import {
   Search,
@@ -110,7 +110,7 @@ export default function SalesTab({
     setIsEditingSteamDesc(false);
   };
 
-  // 🎮 GUARDAR DESCRIPCIÓN Y PROMOS VINCULADAS EN FIREBASE
+  // 🎮 GUARDAR CON VINCULACIÓN BIDIRECCIONAL (RECÍPROCA) EN FIREBASE
   const handleSaveSteamDescription = async () => {
     if (!steamDetailItem) return;
 
@@ -118,10 +118,35 @@ export default function SalesTab({
 
     try {
       const trimmed = steamDescInput.trim();
+      const originalIds = steamDetailItem.relatedPromoIds || steamDetailItem.raw?.relatedPromoIds || [];
+
+      // Identificar cuáles promos se vincularon nuevas y cuáles se desvincularon
+      const addedIds = selectedRelatedIds.filter((id) => !originalIds.includes(id));
+      const removedIds = originalIds.filter((id) => !selectedRelatedIds.includes(id));
+
+      // 1. Guardar en la promo actual
       await updateDoc(doc(db, collectionName, steamDetailItem.id), {
         description: trimmed,
         relatedPromoIds: selectedRelatedIds
       });
+
+      // 2. Si es una promo, vincular recíprocamente en las otras promos agregadas
+      if (steamDetailItem.isPromo) {
+        const addPromises = addedIds.map((targetId) =>
+          updateDoc(doc(db, 'promos', targetId), {
+            relatedPromoIds: arrayUnion(steamDetailItem.id)
+          })
+        );
+
+        // 3. Desvincular recíprocamente en las promos quitadas
+        const removePromises = removedIds.map((targetId) =>
+          updateDoc(doc(db, 'promos', targetId), {
+            relatedPromoIds: arrayRemove(steamDetailItem.id)
+          })
+        );
+
+        await Promise.all([...addPromises, ...removePromises]);
+      }
 
       // Actualizar vista local al instante
       setSteamDetailItem((prev) => ({
@@ -130,9 +155,9 @@ export default function SalesTab({
         relatedPromoIds: selectedRelatedIds
       }));
       setIsEditingSteamDesc(false);
-      notify('✨ Cambios guardados en Firebase');
+      notify('✨ Vinculación recíproca guardada en Firebase');
     } catch (err) {
-      console.error('Error al guardar:', err);
+      console.error('Error al guardar vinculación:', err);
       notify('⚠️ Error al guardar en la base de datos');
     }
   };
@@ -446,6 +471,7 @@ export default function SalesTab({
       notify('📸 Imagen del ticket descargada');
     } catch (err) {
       notify('⚠️ No se pudo generar la imagen');
+    } flex {
     } finally {
       setIsGeneratingImage(false);
     }
@@ -966,7 +992,7 @@ export default function SalesTab({
         </div>
       </div>
 
-      {/* 🎮 MODAL ESTILO STEAM WORKSHOP (CON VINCULACIÓN MANUAL Y BLOQUEO) */}
+      {/* 🎮 MODAL ESTILO STEAM WORKSHOP (CON VINCULACIÓN RECÍPROCA AUTOMÁTICA) */}
       {steamDetailItem && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl space-y-0 relative animate-fadeIn max-h-[90vh] flex flex-col">
@@ -1056,13 +1082,13 @@ export default function SalesTab({
                     />
                   </div>
 
-                  {/* 🔗 SELECCIÓN MANUAL DE PROMOS SIMILARES CON BLOQUEO */}
+                  {/* 🔗 SELECCIÓN MANUAL CON VINCULACIÓN RECÍPROCA AUTOMÁTICA */}
                   <div className="space-y-1.5 pt-2 border-t border-slate-800">
                     <label className="text-[10px] font-bold text-fuchsia-400 uppercase tracking-wider flex items-center gap-1">
-                      <Link2 className="w-3.5 h-3.5" /> Vincular Promos Similares a Sugerir:
+                      <Link2 className="w-3.5 h-3.5" /> Vincular Promos Similares (Recíproco 🔄):
                     </label>
                     <p className="text-[10px] text-slate-400">
-                      Seleccioná las promos que querés recomendar cuando se abra esta ficha.
+                      Las promos marcadas también recomendarán automáticamente esta promo en sus fichas.
                     </p>
 
                     <div className="max-h-36 overflow-y-auto space-y-1 pr-1 border border-slate-800 rounded-2xl p-2 bg-slate-950/80">
