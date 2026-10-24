@@ -1,6 +1,6 @@
 import React from 'react';
 import { Plus, Pencil, Trash2, Power, Sparkles, TrendingUp } from 'lucide-react';
-import { formatCurrency } from '../utils';
+import { formatCurrency, formatPromoDescription } from '../utils';
 
 export default function PromosTab({
   promos = [],
@@ -46,6 +46,8 @@ export default function PromosTab({
             }, 0);
             const promoProfit = (promo.price || 0) - promoCost;
 
+            const comboContentText = formatPromoDescription(promo.items, products, promo.price) || promo.description;
+
             return (
               <div
                 key={promo.id}
@@ -73,11 +75,26 @@ export default function PromosTab({
                   </button>
                 </div>
 
-                {promo.description && (
-                  <p className="text-xs text-slate-300 bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
-                    {promo.description}
+                {/* CONTENIDO Y DETALLES DEL COMBO */}
+                <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80 space-y-1.5">
+                  <span className="text-[10px] font-bold text-fuchsia-400 uppercase tracking-wider block">
+                    Contenido del Combo:
+                  </span>
+                  <p className="text-xs text-slate-200 font-medium">
+                    {comboContentText || "Sin bebidas especificadas"}
                   </p>
-                )}
+
+                  {promo.detailDescription && (
+                    <div className="pt-1.5 border-t border-slate-800/80">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase block">
+                        Detalle Adicional (Ficha):
+                      </span>
+                      <p className="text-[11px] text-slate-300 italic whitespace-pre-line">
+                        📝 {promo.detailDescription}
+                      </p>
+                    </div>
+                  )}
+                </div>
 
                 {/* DESGLOSE DE PRECIO Y GANANCIA DE LA PROMO */}
                 <div className="pt-2 border-t border-slate-800 space-y-2">
