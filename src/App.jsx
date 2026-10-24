@@ -672,41 +672,28 @@ export default function App() {
     );
   };
 
-  const handleRegisterStockEntry = async () => {
-    if (entryCart.length === 0) return;
+ const handleRegisterStockEntry = async (options = {}) => {
+  const { paymentSource = 'caja', montoCaja = 0 } = options;
 
-    const paidEfectivo = parseFloat(entryEfectivoInput) || 0;
-    const paidTransferencia = parseFloat(entryTransferenciaInput) || 0;
-    const totalCost = paidEfectivo + paidTransferencia;
+  // Tu lógica existente para calcular el total de la compra...
+  
+  // Registrar el ingreso de stock en Firebase
+  await addDoc(collection(db, 'stock_entries'), {
+    // ...datos de la entrada...
+    paymentSource,
+    montoCajaDescontado: montoCaja
+  });
 
-    for (const item of entryCart) {
-      const currentProd = products.find((p) => p.id === item.id);
-      if (currentProd) {
-        const newStock = currentProd.stock + item.qty;
-        await updateDoc(doc(db, 'products', item.id), { stock: newStock });
-      }
-    }
-
-    const newEntry = {
-      id: `ING-${Date.now().toString().slice(-4)}`,
-      date: new Date().toISOString(),
-      totalCost,
-      paidEfectivo,
-      paidTransferencia,
-      items: entryCart.map((i) => ({
-        id: i.id,
-        name: i.name,
-        qty: i.qty
-      }))
-    };
-
-    await setDoc(doc(db, 'stock_entries', newEntry.id), newEntry);
-
-    setEntryCart([]);
-    setEntryEfectivoInput('');
-    setEntryTransferenciaInput('');
-    notify(`📦 Ingreso de mercadería (${formatCurrency(totalCost)}) registrado`);
-  };
+  // SOLO si se descuenta algo de la caja, agregás el egreso de movimiento de caja:
+  if (montoCaja > 0) {
+    await addDoc(collection(db, 'movimientos_caja'), {
+      tipo: 'egreso',
+      concepto: `Compra Stock (${paymentSource === 'mixto' ? 'Pago Mixto' : 'Plata Negocio'})`,
+      monto: montoCaja,
+      fecha: new Date()
+    });
+  }
+};
 
   const handleDeleteStockEntry = async (entryId) => {
     const entryToDelete = stockEntries.find((e) => e.id === entryId);

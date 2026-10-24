@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, Trash2, PackageCheck, History, Receipt } from 'lucide-react';
+import { Search, Plus, Trash2, PackageCheck, History, Receipt, DollarSign } from 'lucide-react';
 import { formatCurrency, formatDate } from '../utils';
 
 export default function StockEntryTab({
@@ -17,11 +17,14 @@ export default function StockEntryTab({
   setEntryTransferenciaInput,
   handleRegisterStockEntry,
   handleDeleteStockEntry,
-  // 🟢 PROPS DE GASTOS VARIOS
   expenses = [],
   onAddExpense,
   onDeleteExpense
 }) {
+  // ESTADOS PARA ORIGEN DE PAGO DEL INGRESO DE STOCK
+  const [entryPaymentSource, setEntryPaymentSource] = useState('caja'); // 'caja' | 'mixto' | 'personal'
+  const [entryMontoCajaInput, setEntryMontoCajaInput] = useState('');
+
   // ESTADOS PARA EL FORMULARIO DE GASTOS VARIOS
   const [expenseDesc, setExpenseDesc] = useState('');
   const [expenseAmount, setExpenseAmount] = useState('');
@@ -50,7 +53,6 @@ export default function StockEntryTab({
       p.brand?.toLowerCase().includes(entrySearchTerm.toLowerCase())
   );
 
-  // PERMITIR ESCRIBIR LA CANTIDAD DIRECTAMENTE CON EL TECLADO
   const handleDirectQtyChange = (id, value) => {
     const parsed = parseInt(value, 10);
     const newQty = isNaN(parsed) || parsed < 1 ? 1 : parsed;
@@ -62,6 +64,21 @@ export default function StockEntryTab({
   const efctVal = parseFloat(entryEfectivoInput) || 0;
   const transfVal = parseFloat(entryTransferenciaInput) || 0;
   const calculatedTotal = efctVal + transfVal;
+
+  // Cálculo de cuánto sale realmente de la caja del negocio
+  const montoDescuentoCajaReal = 
+    entryPaymentSource === 'caja' 
+      ? calculatedTotal 
+      : entryPaymentSource === 'mixto' 
+      ? (parseFloat(entryMontoCajaInput) || 0) 
+      : 0;
+
+  const handleConfirmEntry = () => {
+    handleRegisterStockEntry({
+      paymentSource: entryPaymentSource,
+      montoCaja: montoDescuentoCajaReal
+    });
+  };
 
   return (
     <div className="space-y-8">
@@ -124,7 +141,6 @@ export default function StockEntryTab({
                 <div key={item.id} className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80 flex items-center justify-between text-xs">
                   <span className="font-medium text-slate-200 truncate flex-1 pr-2">{item.name}</span>
                   
-                  {/* CONTROLES CON CASILLA NUMÉRICA EDITABLE DIRECTA */}
                   <div className="flex items-center gap-1.5 bg-slate-900 px-2 py-1 rounded-xl border border-slate-800">
                     <button
                       onClick={() => updateEntryQty(item.id, -1)}
@@ -151,7 +167,7 @@ export default function StockEntryTab({
             )}
           </div>
 
-          {/* CASILLEROS SEPARADOS PARA PAGO EN EFECTIVO Y MERCADO PAGO */}
+          {/* CASILLEROS DE PAGO Y SELECCIÓN DE ORIGEN DE FONDOS */}
           <div className="pt-3 border-t border-slate-800 space-y-3">
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -179,15 +195,93 @@ export default function StockEntryTab({
               </div>
             </div>
 
-            {/* TOTAL SUMADO EN TIEMPO REAL */}
+            {/* SELECTOR DE ORIGEN DE FONDOS */}
+            <div className="space-y-2 pt-1 border-t border-slate-800/60">
+              <label className="text-[11px] font-bold text-slate-400 block">
+                ¿De dónde salió la plata de esta compra?
+              </label>
+
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setEntryPaymentSource('caja')}
+                  className={`p-2 rounded-xl border text-[11px] font-bold transition ${
+                    entryPaymentSource === 'caja'
+                      ? 'bg-fuchsia-500 text-slate-950 border-fuchsia-400'
+                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  🏢 100% Negocio
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEntryPaymentSource('mixto')}
+                  className={`p-2 rounded-xl border text-[11px] font-bold transition ${
+                    entryPaymentSource === 'mixto'
+                      ? 'bg-amber-500 text-slate-950 border-amber-400'
+                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  🔀 Pago Mixto
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEntryPaymentSource('personal')}
+                  className={`p-2 rounded-xl border text-[11px] font-bold transition ${
+                    entryPaymentSource === 'personal'
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400'
+                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  👤 100% Mi Plata
+                </button>
+              </div>
+
+              {/* CAMPO SI SE SELECCIONA PAGO MIXTO */}
+              {entryPaymentSource === 'mixto' && (
+                <div className="bg-slate-950 p-2.5 rounded-xl border border-amber-500/40 space-y-1">
+                  <label className="text-[10px] font-bold text-amber-400 block">
+                    Monto descontado de la CAJA DEL NEGOCIO ($):
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder="Ej: 50000"
+                    value={entryMontoCajaInput}
+                    onChange={(e) => setEntryMontoCajaInput(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2 text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                  {calculatedTotal > 0 && (
+                    <p className="text-[9px] text-slate-400">
+                      • Tu aporte personal:{' '}
+                      <span className="text-emerald-400 font-bold font-mono">
+                        ${Math.max(0, calculatedTotal - (parseFloat(entryMontoCajaInput) || 0))}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* TOTAL SUMADO EN TIEMPO REAL Y DESCUENTO REAL */}
             <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 flex justify-between items-center text-xs">
-              <span className="text-slate-400 font-bold uppercase">Costo Total Compra:</span>
-              <span className="font-mono text-base font-bold text-white">{formatCurrency(calculatedTotal)}</span>
+              <div>
+                <span className="text-slate-400 font-bold uppercase block text-[10px]">Costo Total Compra:</span>
+                <span className="font-mono text-base font-bold text-white">{formatCurrency(calculatedTotal)}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-slate-400 font-bold uppercase block text-[10px]">Se descuenta de Caja:</span>
+                <span className="font-mono text-xs font-bold text-amber-400">
+                  {formatCurrency(montoDescuentoCajaReal)}
+                </span>
+              </div>
             </div>
 
             <button
               disabled={entryCart.length === 0 || calculatedTotal <= 0}
-              onClick={handleRegisterStockEntry}
+              onClick={handleConfirmEntry}
               className="w-full bg-fuchsia-500 hover:bg-fuchsia-400 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-bold py-3.5 rounded-2xl transition shadow-lg shadow-fuchsia-500/20 flex items-center justify-center gap-2"
             >
               <PackageCheck className="w-5 h-5" /> Confirmar Ingreso de Stock
