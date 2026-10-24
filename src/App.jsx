@@ -408,6 +408,7 @@ export default function App() {
     handleUpdatePromoItems(promoItems.filter((item) => item.productId !== productId));
   };
 
+  // GUARDA O ACTUALIZA PROMOS SIN PISAR NI BORRAR 'detailDescription'
   const handlePromoSubmit = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -420,7 +421,8 @@ export default function App() {
           type: fd.get('type') || editingPromo.type,
           imageUrl: fd.get('imageUrl') ?? editingPromo.imageUrl ?? '',
           price: !isNaN(parsedPrice) ? parsedPrice : editingPromo.price,
-          description: promoDescription || fd.get('description') || '',
+          description: promoDescription || fd.get('description') || editingPromo.description || '',
+          detailDescription: editingPromo.detailDescription || '',
           items: promoItems
         });
         notify('✏️ Promoción actualizada');
@@ -433,6 +435,7 @@ export default function App() {
           price: !isNaN(parsedPrice) ? parsedPrice : 0,
           active: true,
           description: promoDescription || fd.get('description') || '',
+          detailDescription: '',
           items: promoItems
         };
         await setDoc(doc(db, 'promos', newPromo.id), newPromo);
