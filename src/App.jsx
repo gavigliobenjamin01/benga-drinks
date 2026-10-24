@@ -672,27 +672,73 @@ export default function App() {
     );
   };
 
- const handleRegisterStockEntry = async (options = {}) => {
-  const { paymentSource = 'caja', montoCaja = 0 } = options;
+ const handleRegisterStockEntry = async (extraData = {}) => {
+  if (entryCart.length === 0) return;
 
-  // Tu lógica existente para calcular el total de la compra...
-  
-  // Registrar el ingreso de stock en Firebase
-  await addDoc(collection(db, 'stock_entries'), {
-    // ...datos de la entrada...
-    paymentSource,
-    montoCajaDescontado: montoCaja
-  });
+  const efct = parseFloat(entryEfectivoInput) || 0;
+  const transf = parseFloat(entryTransferenciaInput) || 0;
+  const totalCost = efct + transf;
 
-  // SOLO si se descuenta algo de la caja, agregás el egreso de movimiento de caja:
-  if (montoCaja > 0) {
-    await addDoc(collection(db, 'movimientos_caja'), {
-      tipo: 'egreso',
-      concepto: `Compra Stock (${paymentSource === 'mixto' ? 'Pago Mixto' : 'Plata Negocio'})`,
-      monto: montoCaja,
-      fecha: new Date()
+  if (totalCost <= 0) return;
+
+  // Extraer el origen de pago y el monto a descontar de la caja
+  const paymentSource = extraData?.paymentSource || 'caja';
+  const montoCaja = extraData?.montoCaja !== undefined ? extraData.montoCaja : totalCost;
+
+  try {
+    // 1. Generar número correlativo para el ingreso
+    const lastIngNum = parseInt(localStorage.getItem('benga_last_ing_num') || '8163', 10);
+    const nextIngNum = lastIngNum + 1;
+    localStorage.setItem('benga_last_ing_num', nextIngNum.toString());
+    const entryId = `ING-${nextIngNum}`;
+
+    // 2. Guardar en la colección de ingresos de stock en Firebase
+    await addDoc(collection(db, 'stock_entries'), {
+      entryId,
+      date: new Date().toISOString(),
+      items: entryCart.map((item) => ({
+        id: item.id,
+        name: item.name,
+        qty: item.qty
+      })),
+      paidEfectivo: efct,
+      paidTransferencia: transf,
+      totalCost,
+      paymentSource,
+      montoCajaDescontado: montoCaja
     });
+
+    // 3. Sumar el stock a cada producto en la base de datos
+    for (const item of entryCart) {
+      const prodRef = doc(db, 'products', item.id);
+      const currentProd = products.find((p) => p.id === item.id);
+      const currentStock = currentProd ? Number(currentProd.stock || 0) : 0;
+      
+      await updateDoc(prodRef, {
+        stock: currentStock + Number(item.qty)
+      });
+    }
+
+    // 4. Descontar de la caja SOLO el monto indicado (si fue con plata del negocio)
+    if (montoCaja > 0) {
+      await addDoc(collection(db, 'movimientos_caja'), {
+        tipo: 'egreso',
+        concepto: `Ingreso Stock #${entryId} (${paymentSource === 'mixto' ? 'Pago Mixto' : 'Plata Negocio'})`,
+        monto: montoCaja,
+        fecha: new Date().toISOString()
+      });
+    }
+
+    // 5. Limpiar el carrito y los campos
+    setEntryCart([]);
+    setEntryEfectivoInput('');
+    setEntryTransferenciaInput('');
+    notify('✨ Ingreso de mercadería y stock registrados correctamente');
+  } catch (err) {
+    console.error('Error al registrar ingreso de stock:', err);
+    notify('⚠️ Error al guardar en la base de datos');
   }
+};
 };
 
   const handleDeleteStockEntry = async (entryId) => {
