@@ -22,7 +22,7 @@ import {
   Save,
   Link2
 } from 'lucide-react';
-import { formatCurrency } from '../utils';
+import { formatCurrency, formatPromoDescription } from '../utils';
 
 const getOptimizedImageUrl = (url) => {
   if (!url || typeof url !== 'string') return '';
@@ -97,7 +97,11 @@ export default function SalesTab({
 
   const openSteamDetailModal = (item) => {
     setSteamDetailItem(item);
-    setSteamDescInput(item.detailDescription || item.raw?.detailDescription || '');
+    const autoDesc = item.isPromo 
+      ? formatPromoDescription(item.items || item.raw?.items, products, item.price)
+      : (item.description || item.raw?.description || '');
+      
+    setSteamDescInput(item.detailDescription || item.raw?.detailDescription || autoDesc);
     setSelectedRelatedIds(item.relatedPromoIds || item.raw?.relatedPromoIds || []);
     setIsEditingSteamDesc(false);
   };
@@ -597,11 +601,11 @@ export default function SalesTab({
                     <h3 className="font-bold text-xs text-slate-100 group-hover:text-fuchsia-400 line-clamp-1">
                       {item.name}
                     </h3>
-                    {item.description && (
-                      <p className="text-[10px] text-slate-400 line-clamp-1">
-                        {item.description}
-                      </p>
-                    )}
+                    <p className="text-[10px] text-slate-400 line-clamp-1">
+                      {item.isPromo
+                        ? (formatPromoDescription(item.items || item.raw?.items, products, item.price) || item.description)
+                        : item.description}
+                    </p>
                   </div>
 
                   <div className="flex items-center justify-between pt-1">
@@ -976,7 +980,6 @@ export default function SalesTab({
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl space-y-0 relative animate-fadeIn max-h-[90vh] flex flex-col">
             
-            {/* 🖼️ FOTO EN GRANDE */}
             <div className="h-56 bg-slate-950 relative flex items-center justify-center border-b border-slate-800 flex-shrink-0">
               {steamDetailItem.imageUrl ? (
                 <img
@@ -1023,7 +1026,6 @@ export default function SalesTab({
               </button>
             </div>
 
-            {/* 📄 DETALLE ABAJO DE LA FOTO */}
             <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
               <div className="flex justify-between items-start border-b border-slate-800 pb-3">
                 <div>
@@ -1136,8 +1138,10 @@ export default function SalesTab({
                   </div>
 
                   <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 text-slate-300 leading-relaxed min-h-[60px]">
-                    {steamDetailItem.detailDescription ? (
-                      <p className="whitespace-pre-line text-slate-200">{steamDetailItem.detailDescription}</p>
+                    {(steamDetailItem.detailDescription || steamDetailItem.description || (steamDetailItem.isPromo && formatPromoDescription(steamDetailItem.items || steamDetailItem.raw?.items, products, steamDetailItem.price))) ? (
+                      <p className="whitespace-pre-line text-slate-200">
+                        {steamDetailItem.detailDescription || steamDetailItem.description || formatPromoDescription(steamDetailItem.items || steamDetailItem.raw?.items, products, steamDetailItem.price)}
+                      </p>
                     ) : (
                       <p className="text-slate-600 italic">
                         Sin descripción cargada. Tocá el ícono ⚙️ arriba a la derecha de la foto para escribir los detalles.
