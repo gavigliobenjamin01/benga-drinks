@@ -16,13 +16,51 @@ export const formatDate = (isoString) => {
   });
 };
 
-export const formatPromoDescription = (itemsArr, productsList) => {
-  if (!itemsArr || itemsArr.length === 0) return '';
-  return itemsArr
-    .map((item) => {
-      const prod = productsList.find((p) => p.id === item.productId);
-      const name = prod ? prod.name : 'Producto';
-      return item.quantity > 1 ? `${item.quantity} ${name}` : name;
-    })
-    .join(', ');
+export const formatPromoDescription = (promoItems = [], products = [], promoPrice = 0) => {
+  if (!promoItems || promoItems.length === 0) return '';
+
+  const itemsDetail = [];
+  let totalComboCost = 0;
+
+  // 1. Obtener datos y sumar el costo base total de todos los componentes
+  promoItems.forEach((item) => {
+    const prod = products.find((p) => p.id === item.productId);
+    if (prod) {
+      const unitCost = Number(prod.costPrice ?? prod.cost ?? 0);
+      const unitSell = Number(prod.sellPrice ?? prod.price ?? 0);
+      
+      // Se utiliza el costo base; si no está cargado, se usa el precio de venta como alternativa
+      const weightFactor = unitCost > 0 ? unitCost : unitSell;
+
+      totalComboCost += weightFactor * item.quantity;
+
+      itemsDetail.push({
+        name: prod.name,
+        qty: item.quantity,
+        weightFactor
+      });
+    }
+  });
+
+  if (itemsDetail.length === 0) return '';
+
+  const numericPromoPrice = parseFloat(promoPrice) || 0;
+
+  // 2. Si hay precio de promo cargado y los costos base suman más de 0
+  if (numericPromoPrice > 0 && totalComboCost > 0) {
+    const formattedItems = itemsDetail.map((item) => {
+      // Precio proporcional por unidad asignado según el costo base
+      const unitComboPrice = Math.round(numericPromoPrice * (item.weightFactor / totalComboCost));
+      const priceText = item.qty > 1 
+        ? `$${unitComboPrice.toLocaleString('es-AR')} c/u` 
+        : `$${unitComboPrice.toLocaleString('es-AR')}`;
+
+      return `${item.qty}x ${item.name} (${priceText})`;
+    });
+
+    return formattedItems.join(' + ');
+  }
+
+  // Caso por defecto mientras no haya precio cargado
+  return itemsDetail.map((i) => `${i.qty}x ${i.name}`).join(' + ');
 };

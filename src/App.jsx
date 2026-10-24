@@ -117,12 +117,11 @@ export default function App() {
       setSales(list);
     });
 
-    // Reemplazar la suscripción unsubStockEntries por esta:
-const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot) => {
-  const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
-  list.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-  setStockEntries(list);
-});
+    const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot) => {
+      const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
+      list.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+      setStockEntries(list);
+    });
 
     const unsubWithdrawals = onSnapshot(collection(db, 'withdrawals'), (snapshot) => {
       const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
@@ -206,12 +205,12 @@ const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot)
     }
   };
 
-  // MÉTRICAS Y CÁLCULO DE CAJAS BLINDADO (CON GASTOS VARIOS INCLUIDOS)
+  // MÉTRICAS Y CÁLCULO DE CAJAS BLINDADO
   const metrics = useMemo(() => {
     const paidSales = sales.filter((s) => s.paymentMethod !== 'Fiado');
     
     const totalSalesCost = paidSales.reduce((acc, s) => {
-      if (s.cost !== undefined && s.cost !== null && Number(s.cost) > 0) {
+      if (s.cost !== undefined && s.cost !== null && !isNaN(Number(s.cost))) {
         return acc + Number(s.cost);
       }
       
@@ -228,7 +227,6 @@ const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot)
       return acc + (Number(s.total) || 0) * 0.6;
     }, 0);
 
-    // 💸 Gastos varios por medio de pago (Bolsas, insumos, fletes, etc.)
     const totalEfectivoExpenses = (expenses || []).reduce((acc, ex) => {
       return ex.paymentMethod === 'Efectivo' ? acc + (Number(ex.amount) || 0) : acc;
     }, 0);
@@ -237,14 +235,12 @@ const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot)
       return ex.paymentMethod === 'Transferencia' ? acc + (Number(ex.amount) || 0) : acc;
     }, 0);
 
-    // 💵 Efectivo disponible = Ventas Efectivo - Compras Stock - Gastos Varios Efectivo
     const efectivoRevenue = paidSales.reduce((acc, s) => {
       if (s.paymentMethod === 'Efectivo') return acc + (s.total || 0);
       if (s.paymentMethod === 'Mixto') return acc + (Number(s.paidEfectivo) || 0);
       return acc;
     }, 0) - (stockEntries || []).reduce((acc, e) => acc + (Number(e.paidEfectivo) || 0), 0) - totalEfectivoExpenses;
 
-    // 💳 Transferencia disponible = Ventas MP - Compras Stock MP - Gastos Varios MP
     const transferenciaRevenue = paidSales.reduce((acc, s) => {
       if (s.paymentMethod === 'Transferencia') return acc + (s.total || 0);
       if (s.paymentMethod === 'Mixto') return acc + (Number(s.paidTransferencia) || 0);
@@ -283,7 +279,6 @@ const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot)
     };
   }, [sales, clients, products, withdrawals, salaryPercentage, stockEntries, expenses]);
 
-  // CATEGORÍAS DE INVENTARIO CORREGIDAS
   const inventoryCategories = useMemo(() => {
     const prodCats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
     return ['Todas', ...prodCats];
@@ -326,24 +321,29 @@ const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot)
       return;
     }
 
-    let updatedProducts = [...products];
+    // Actualizar solo el stock de los productos afectados
+    const updatedStocks = {};
     saleCart.forEach((item) => {
-      if (item.type === 'product') {
-        updatedProducts = updatedProducts.map((p) =>
-          p.id === item.id ? { ...p, stock: Math.max(0, p.stock - item.qty) } : p
-        );
+      if (item.type === 'product' || !item.type) {
+        const p = products.find((prod) => prod.id === item.id);
+        if (p) {
+          const currentStock = updatedStocks[p.id] !== undefined ? updatedStocks[p.id] : p.stock;
+          updatedStocks[p.id] = Math.max(0, currentStock - item.qty);
+        }
       } else if (item.type === 'promo') {
-        item.raw.items?.forEach((comp) => {
-          updatedProducts = updatedProducts.map((p) =>
-            p.id === comp.productId ? { ...p, stock: Math.max(0, p.stock - comp.quantity * item.qty) } : p
-          );
+        item.raw?.items?.forEach((comp) => {
+          const p = products.find((prod) => prod.id === comp.productId);
+          if (p) {
+            const currentStock = updatedStocks[p.id] !== undefined ? updatedStocks[p.id] : p.stock;
+            updatedStocks[p.id] = Math.max(0, currentStock - (comp.quantity * item.qty));
+          }
         });
       }
     });
 
-    updatedProducts.forEach((p) => {
-      updateDoc(doc(db, 'products', p.id), { stock: p.stock });
-    });
+    for (const [prodId, newStock] of Object.entries(updatedStocks)) {
+      await updateDoc(doc(db, 'products', prodId), { stock: newStock });
+    }
 
     if (paymentMethod === 'Fiado') {
       const clientObj = clients.find((c) => c.name === selectedClient);
@@ -406,7 +406,13 @@ const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot)
     const saleToPay = sales.find((s) => s.id === saleId);
     if (!saleToPay || saleToPay.paymentMethod !== 'Fiado') return;
 
-    await updateDoc(doc(db, 'sales', saleId), { paymentMethod: newPaymentMethod });
+    const updateData = {
+      paymentMethod: newPaymentMethod,
+      paidEfectivo: newPaymentMethod === 'Efectivo' ? saleToPay.total : 0,
+      paidTransferencia: newPaymentMethod === 'Transferencia' ? saleToPay.total : 0
+    };
+
+    await updateDoc(doc(db, 'sales', saleId), updateData);
 
     const clientObj = clients.find((c) => c.name === saleToPay.client);
     if (clientObj) {
@@ -423,31 +429,32 @@ const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot)
     const saleToDelete = sales.find((s) => s.id === saleId);
     if (!saleToDelete) return;
 
-    let updatedProducts = [...products];
+    // Restaurar stock solo de los productos afectados
+    const restoredStocks = {};
     saleToDelete.items.forEach((item) => {
       if (item.type === 'product' || !item.type) {
-        updatedProducts = updatedProducts.map((p) =>
-          p.id === item.id || p.name === item.name
-            ? { ...p, stock: p.stock + item.qty }
-            : p
-        );
+        const p = products.find((prod) => prod.id === item.id || prod.name === item.name);
+        if (p) {
+          const currentStock = restoredStocks[p.id] !== undefined ? restoredStocks[p.id] : p.stock;
+          restoredStocks[p.id] = currentStock + item.qty;
+        }
       } else if (item.type === 'promo') {
         const promoRef = item.raw || promos.find((pr) => pr.id === item.id);
         if (promoRef && promoRef.items) {
           promoRef.items.forEach((comp) => {
-            updatedProducts = updatedProducts.map((p) =>
-              p.id === comp.productId
-                ? { ...p, stock: p.stock + comp.quantity * item.qty }
-                : p
-            );
+            const p = products.find((prod) => prod.id === comp.productId);
+            if (p) {
+              const currentStock = restoredStocks[p.id] !== undefined ? restoredStocks[p.id] : p.stock;
+              restoredStocks[p.id] = currentStock + (comp.quantity * item.qty);
+            }
           });
         }
       }
     });
 
-    updatedProducts.forEach((p) => {
-      updateDoc(doc(db, 'products', p.id), { stock: p.stock });
-    });
+    for (const [prodId, newStock] of Object.entries(restoredStocks)) {
+      await updateDoc(doc(db, 'products', prodId), { stock: newStock });
+    }
 
     if (saleToDelete.paymentMethod === 'Fiado') {
       const clientObj = clients.find((c) => c.name === saleToDelete.client);
@@ -495,25 +502,29 @@ const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot)
 
   const openEditProductModal = (prod) => {
     setEditingProduct(prod);
-    setProdCostInput((prod.costPrice ?? prod.cost)?.toString() || '');
-    setProdSellInput((prod.sellPrice ?? prod.price)?.toString() || '');
-    setProdComboInput(prod.comboPrice?.toString() || '');
+    setProdCostInput((prod.costPrice ?? prod.cost)?.toString() ?? '');
+    setProdSellInput((prod.sellPrice ?? prod.price)?.toString() ?? '');
+    setProdComboInput(prod.comboPrice?.toString() ?? '');
   };
 
   const handleAddProduct = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
+    const parsedCost = parseFloat(prodCostInput);
+    const parsedSell = parseFloat(prodSellInput);
+    const parsedCombo = parseFloat(prodComboInput);
+
     const newP = {
       id: `p-${Date.now()}`,
       name: fd.get('name'),
       brand: fd.get('brand'),
       category: fd.get('category'),
       imageUrl: fd.get('imageUrl') || '',
-      costPrice: parseFloat(prodCostInput) || 0,
-      sellPrice: parseFloat(prodSellInput) || 0,
-      comboPrice: parseFloat(prodComboInput) || 0,
-      stock: parseInt(fd.get('stock'), 10),
-      minStock: parseInt(fd.get('minStock'), 10),
+      costPrice: !isNaN(parsedCost) ? parsedCost : 0,
+      sellPrice: !isNaN(parsedSell) ? parsedSell : 0,
+      comboPrice: !isNaN(parsedCombo) ? parsedCombo : 0,
+      stock: parseInt(fd.get('stock'), 10) || 0,
+      minStock: parseInt(fd.get('minStock'), 10) || 5,
     };
 
     await setDoc(doc(db, 'products', newP.id), newP);
@@ -525,15 +536,20 @@ const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot)
     e.preventDefault();
     const fd = new FormData(e.target);
 
+    const parsedCost = parseFloat(prodCostInput);
+    const parsedSell = parseFloat(prodSellInput);
+    const parsedCombo = parseFloat(prodComboInput);
+    const parsedMinStock = parseInt(fd.get('minStock'), 10);
+
     const updatedData = {
-      name: fd.get('name'),
-      brand: fd.get('brand'),
-      category: fd.get('category'),
-      imageUrl: fd.get('imageUrl') || editingProduct.imageUrl || '',
-      costPrice: parseFloat(prodCostInput) || editingProduct.costPrice || 0,
-      sellPrice: parseFloat(prodSellInput) || editingProduct.sellPrice || 0,
-      comboPrice: parseFloat(prodComboInput) || (editingProduct.comboPrice || 0),
-      minStock: parseInt(fd.get('minStock'), 10) || editingProduct.minStock
+      name: fd.get('name') || editingProduct.name,
+      brand: fd.get('brand') || editingProduct.brand,
+      category: fd.get('category') || editingProduct.category,
+      imageUrl: fd.get('imageUrl') ?? editingProduct.imageUrl ?? '',
+      costPrice: !isNaN(parsedCost) ? parsedCost : (editingProduct.costPrice ?? 0),
+      sellPrice: !isNaN(parsedSell) ? parsedSell : (editingProduct.sellPrice ?? 0),
+      comboPrice: !isNaN(parsedCombo) ? parsedCombo : (editingProduct.comboPrice ?? 0),
+      minStock: !isNaN(parsedMinStock) ? parsedMinStock : (editingProduct.minStock ?? 5)
     };
 
     await updateDoc(doc(db, 'products', editingProduct.id), updatedData);
@@ -541,9 +557,9 @@ const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot)
     notify('✏️ Precios y datos actualizados');
   };
 
-  const handleUpdatePromoItems = (newItems) => {
+  const handleUpdatePromoItems = (newItems, currentPrice = promoPriceInput) => {
     setPromoItems(newItems);
-    setPromoDescription(formatPromoDescription(newItems, products));
+    setPromoDescription(formatPromoDescription(newItems, products, currentPrice));
   };
 
   const handleAddProductToPromo = (productId) => {
@@ -591,19 +607,21 @@ const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot)
     const initialItems = promo.items || [];
     setPromoItems(initialItems);
     setPromoPriceInput(promo.price?.toString() || '');
-    setPromoDescription(promo.description || formatPromoDescription(initialItems, products));
+    setPromoDescription(promo.description || formatPromoDescription(initialItems, products, promo.price));
     setSelectedProdForPromo('');
   };
 
   const handleAddPromo = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
+    const parsedPrice = parseFloat(promoPriceInput);
+
     const newPromo = {
       id: `pr-${Date.now()}`,
       name: fd.get('name'),
       type: fd.get('type'),
       imageUrl: fd.get('imageUrl') || '',
-      price: parseFloat(promoPriceInput) || 0,
+      price: !isNaN(parsedPrice) ? parsedPrice : 0,
       active: true,
       description: promoDescription || fd.get('description') || '',
       items: promoItems
@@ -624,12 +642,13 @@ const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot)
   const handleUpdatePromo = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
+    const parsedPrice = parseFloat(promoPriceInput);
 
     const updatedData = {
-      name: fd.get('name'),
-      type: fd.get('type'),
-      imageUrl: fd.get('imageUrl') || editingPromo.imageUrl || '',
-      price: parseFloat(promoPriceInput) || editingPromo.price,
+      name: fd.get('name') || editingPromo.name,
+      type: fd.get('type') || editingPromo.type,
+      imageUrl: fd.get('imageUrl') ?? editingPromo.imageUrl ?? '',
+      price: !isNaN(parsedPrice) ? parsedPrice : editingPromo.price,
       description: promoDescription || fd.get('description') || '',
       items: promoItems
     };
@@ -673,7 +692,7 @@ const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot)
     );
   };
 
-const handleRegisterStockEntry = async (extraData = {}) => {
+  const handleRegisterStockEntry = async (extraData = {}) => {
     if (entryCart.length === 0) return;
 
     const efct = parseFloat(entryEfectivoInput) || 0;
@@ -682,33 +701,30 @@ const handleRegisterStockEntry = async (extraData = {}) => {
 
     if (totalCost <= 0) return;
 
-    // Extraer el origen de pago y el monto a descontar de la caja
     const paymentSource = extraData?.paymentSource || 'caja';
     const montoCaja = extraData?.montoCaja !== undefined ? extraData.montoCaja : totalCost;
 
     try {
-      // 1. Generar número correlativo para el ingreso
       const lastIngNum = parseInt(localStorage.getItem('benga_last_ing_num') || '8163', 10);
       const nextIngNum = lastIngNum + 1;
       localStorage.setItem('benga_last_ing_num', nextIngNum.toString());
       const entryId = `ING-${nextIngNum}`;
 
-      // 2. Guardar en la colección de ingresos de stock en Firebase
       await addDoc(collection(db, 'stock_entries'), {
-  entryId, // Ej: "ING-8164"
-  date: new Date().toISOString(),
-  items: entryCart.map((item) => ({
-    id: item.id,
-    name: item.name,
-    qty: item.qty
-  })),
-  paidEfectivo: efct,
-  paidTransferencia: transf,
-  totalCost,
-  paymentSource,
-  montoCajaDescontado: montoCaja
-});
-      // 3. Sumar el stock a cada producto en la base de datos
+        entryId,
+        date: new Date().toISOString(),
+        items: entryCart.map((item) => ({
+          id: item.id,
+          name: item.name,
+          qty: item.qty
+        })),
+        paidEfectivo: efct,
+        paidTransferencia: transf,
+        totalCost,
+        paymentSource,
+        montoCajaDescontado: montoCaja
+      });
+
       for (const item of entryCart) {
         const prodRef = doc(db, 'products', item.id);
         const currentProd = products.find((p) => p.id === item.id);
@@ -719,7 +735,6 @@ const handleRegisterStockEntry = async (extraData = {}) => {
         });
       }
 
-      // 4. Descontar de la caja SOLO el monto indicado (si fue con plata del negocio)
       if (montoCaja > 0) {
         await addDoc(collection(db, 'movimientos_caja'), {
           tipo: 'egreso',
@@ -729,7 +744,6 @@ const handleRegisterStockEntry = async (extraData = {}) => {
         });
       }
 
-      // 5. Limpiar el carrito y los campos
       setEntryCart([]);
       setEntryEfectivoInput('');
       setEntryTransferenciaInput('');
@@ -738,7 +752,7 @@ const handleRegisterStockEntry = async (extraData = {}) => {
       console.error('Error al registrar ingreso de stock:', err);
       notify('⚠️ Error al guardar en la base de datos');
     }
-  }; // <--- Se quitó el "};" duplicado que estaba abajo
+  };
 
   const handleDeleteStockEntry = async (entryId) => {
     const entryToDelete = stockEntries.find((e) => e.id === entryId);
@@ -1569,7 +1583,11 @@ const handleRegisterStockEntry = async (extraData = {}) => {
                   step="any"
                   placeholder="Ej: 5000"
                   value={promoPriceInput}
-                  onChange={(e) => setPromoPriceInput(e.target.value)}
+                  onChange={(e) => {
+                    const newPrice = e.target.value;
+                    setPromoPriceInput(newPrice);
+                    setPromoDescription(formatPromoDescription(promoItems, products, newPrice));
+                  }}
                   className="w-full bg-slate-950 border border-fuchsia-500/50 rounded-xl p-2.5 text-white font-mono text-sm focus:outline-none focus:border-fuchsia-400"
                 />
               </div>
@@ -1622,7 +1640,16 @@ const handleRegisterStockEntry = async (extraData = {}) => {
               <h3 className="font-bold text-base text-white flex items-center gap-2">
                 <Pencil className="w-4 h-4 text-fuchsia-400" /> Modificar Promoción
               </h3>
-              <button onClick={() => setEditingPromo(null)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+              <button
+                onClick={() => {
+                  setEditingPromo(null);
+                  setPromoItems([]);
+                  setPromoDescription('');
+                }}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
             <form onSubmit={handleUpdatePromo} className="space-y-3 text-xs">
               <div>
@@ -1707,7 +1734,11 @@ const handleRegisterStockEntry = async (extraData = {}) => {
                   type="number"
                   step="any"
                   value={promoPriceInput}
-                  onChange={(e) => setPromoPriceInput(e.target.value)}
+                  onChange={(e) => {
+                    const newPrice = e.target.value;
+                    setPromoPriceInput(newPrice);
+                    setPromoDescription(formatPromoDescription(promoItems, products, newPrice));
+                  }}
                   className="w-full bg-slate-950 border border-fuchsia-500/50 rounded-xl p-2.5 text-white font-mono text-sm focus:outline-none focus:border-fuchsia-400"
                 />
               </div>
@@ -1747,7 +1778,17 @@ const handleRegisterStockEntry = async (extraData = {}) => {
                 />
               </div>
               <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => setEditingPromo(null)} className="flex-1 bg-slate-800 text-slate-300 font-bold py-3 rounded-xl">Cancelar</button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingPromo(null);
+                    setPromoItems([]);
+                    setPromoDescription('');
+                  }}
+                  className="flex-1 bg-slate-800 text-slate-300 font-bold py-3 rounded-xl"
+                >
+                  Cancelar
+                </button>
                 <button type="submit" className="flex-1 bg-fuchsia-500 text-slate-950 font-bold py-3 rounded-xl shadow-lg shadow-fuchsia-500/20">Guardar Cambios</button>
               </div>
             </form>
