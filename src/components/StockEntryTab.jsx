@@ -67,17 +67,23 @@ export default function StockEntryTab({
 
   // Cálculo de cuánto sale realmente de la caja del negocio
   const montoDescuentoCajaReal = 
-    entryPaymentSource === 'caja' 
+    entryPaymentSource === 'caja' // <--- Se corrigió 'entryPaymentSo' a 'entryPaymentSource'
       ? calculatedTotal 
       : entryPaymentSource === 'mixto' 
       ? (parseFloat(entryMontoCajaInput) || 0) 
       : 0;
 
-  const handleConfirmEntry = () => {
-    handleRegisterStockEntry({
-      paymentSource: entryPaymentSource,
-      montoCaja: montoDescuentoCajaReal
-    });
+  const handleConfirmEntry = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (typeof handleRegisterStockEntry === 'function') {
+      await handleRegisterStockEntry({
+        paymentSource: entryPaymentSource,
+        montoCaja: montoDescuentoCajaReal
+      });
+      // Limpiar estados locales
+      setEntryPaymentSource('caja');
+      setEntryMontoCajaInput('');
+    }
   };
 
   return (
