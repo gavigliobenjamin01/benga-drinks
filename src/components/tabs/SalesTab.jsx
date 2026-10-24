@@ -22,7 +22,7 @@ import {
   Save,
   Link2
 } from 'lucide-react';
-import { formatCurrency, formatPromoDescription } from '../utils';
+import { formatCurrency } from '../utils';
 
 const getOptimizedImageUrl = (url) => {
   if (!url || typeof url !== 'string') return '';
@@ -48,24 +48,18 @@ export default function SalesTab({
   const [shippingFeeInput, setShippingFeeInput] = useState('');
   const [driverExtraInput, setDriverExtraInput] = useState('');
 
-  // 🧊 ESTADO PARA LA MINI PESTAÑITA DE SELECCIÓN DE HIELO
   const [showIceSelector, setShowIceSelector] = useState(false);
-
-  // 🚀 ESTADO PARA CONTROLAR QUÉ COMBOS TIENEN EL DESPLEGABLE ABIERTO EN EL CARRITO
   const [expandedCombos, setExpandedCombos] = useState({});
 
-  // 🎮 ESTADOS PARA EL MODAL ESTILO STEAM WORKSHOP
   const [steamDetailItem, setSteamDetailItem] = useState(null);
   const [isEditingSteamDesc, setIsEditingSteamDesc] = useState(false);
   const [steamDescInput, setSteamDescInput] = useState('');
   const [selectedRelatedIds, setSelectedRelatedIds] = useState([]);
 
-  // TICKET VISUAL
   const [ticketModalData, setTicketModalData] = useState(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const ticketRef = useRef(null);
 
-  // AUTO-CARGAR PEDIDO PROVENIENTE DE LA WEB DEL CLIENTE O DE REABRIR VENTA
   useEffect(() => {
     if (prefilledOrder) {
       if (prefilledOrder.items && prefilledOrder.items.length > 0) {
@@ -87,7 +81,6 @@ export default function SalesTab({
     }
   }, [prefilledOrder]);
 
-  // 🛡️ LECTOR SEGURO DE STOCK Y VALIDACIÓN DE PROMOS
   const getSafeStock = (val) => {
     if (val === undefined || val === null || val === '') return 0;
     const num = parseInt(val, 10);
@@ -102,23 +95,13 @@ export default function SalesTab({
     });
   };
 
-  // 🎮 ABRIR MODAL STEAM WORKSHOP
   const openSteamDetailModal = (item) => {
     setSteamDetailItem(item);
-    const initialDetail = item.detailDescription !== undefined
-      ? item.detailDescription
-      : (item.raw?.detailDescription !== undefined
-        ? item.raw.detailDescription
-        : (item.isPromo 
-            ? (item.description || formatPromoDescription(item.items || item.raw?.items, products, item.price))
-            : (item.description || item.raw?.description || '')));
-            
-    setSteamDescInput(initialDetail);
+    setSteamDescInput(item.detailDescription || item.raw?.detailDescription || '');
     setSelectedRelatedIds(item.relatedPromoIds || item.raw?.relatedPromoIds || []);
     setIsEditingSteamDesc(false);
   };
 
-  // 🎮 GUARDAR DETALLE Y VINCULACIÓN EN GRUPO COMPLETO
   const handleSaveSteamDescription = async () => {
     if (!steamDetailItem) return;
 
@@ -128,16 +111,13 @@ export default function SalesTab({
       const trimmed = steamDescInput.trim();
       const originalIds = steamDetailItem.relatedPromoIds || steamDetailItem.raw?.relatedPromoIds || [];
 
-      // Promos que se desvincularon
       const removedIds = originalIds.filter((id) => !selectedRelatedIds.includes(id));
 
-      // 1. Guardar la descripción de detalle y la lista en la promo actual
       await updateDoc(doc(db, collectionName, steamDetailItem.id), {
         detailDescription: trimmed,
         relatedPromoIds: selectedRelatedIds
       });
 
-      // 2. Si es una promo, vincular automáticamente a TODAS las integrantes entre sí
       if (steamDetailItem.isPromo) {
         const fullGroupIds = [steamDetailItem.id, ...selectedRelatedIds];
 
@@ -159,21 +139,19 @@ export default function SalesTab({
         await Promise.all([...groupPromises, ...removePromises]);
       }
 
-      // Actualizar la vista local al instante
       setSteamDetailItem((prev) => ({
         ...prev,
         detailDescription: trimmed,
         relatedPromoIds: selectedRelatedIds
       }));
       setIsEditingSteamDesc(false);
-      notify('✨ ¡Detalles y vinculación guardados!');
+      notify('✨ ¡Detalles guardados correctamente!');
     } catch (err) {
-      console.error('Error al guardar vinculación en grupo:', err);
+      console.error('Error al guardar en la base de datos:', err);
       notify('⚠️ Error al guardar en la base de datos');
     }
   };
 
-  // TOGGLE VINCULACIÓN DE PROMOS MANUALMENTE
   const toggleRelatedPromo = (promoId) => {
     setSelectedRelatedIds((prev) =>
       prev.includes(promoId)
@@ -182,7 +160,6 @@ export default function SalesTab({
     );
   };
 
-  // PROMOS SIMILARES SELECCIONADAS MANUALMENTE
   const activeRelatedPromos = useMemo(() => {
     if (!steamDetailItem) return [];
     const ids = steamDetailItem.relatedPromoIds || steamDetailItem.raw?.relatedPromoIds || [];
@@ -193,13 +170,11 @@ export default function SalesTab({
     );
   }, [steamDetailItem, promos]);
 
-  // CATEGORÍAS
   const categories = useMemo(() => {
     const cats = Array.from(new Set(products.map((p) => p.category))).filter(Boolean);
     return ['Todas', '🔥 Promos & Combos', ...cats];
   }, [products]);
 
-  // FILTRADO CON BÚSQUEDA DENTRO DE COMBOS
   const filteredCatalog = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
 
@@ -208,7 +183,7 @@ export default function SalesTab({
       if (!term) return true;
 
       const nameMatch = (pr.name || '').toLowerCase().includes(term);
-      const descMatch = (pr.detailDescription || pr.description || '').toLowerCase().includes(term);
+      const descMatch = (pr.description || pr.detailDescription || '').toLowerCase().includes(term);
       const itemsMatch = (pr.items || []).some((item) => {
         const pObj = products.find((p) => p.id === item.productId);
         if (!pObj) return false;
@@ -248,12 +223,10 @@ export default function SalesTab({
     return [...matchingPromos, ...matchingProducts];
   }, [products, promos, searchTerm, selectedCategory]);
 
-  // DETECTAR SI HAY PROMO EN EL CARRITO
   const hasPromoInCart = useMemo(() => {
     return cart.some((item) => item.type === 'promo' || item.isPromo || (item.name || '').toLowerCase().includes('combo'));
   }, [cart]);
 
-  // APLICAR DESCUENTO P. COMBO DINÁMICAMENTE
   const processedCart = useMemo(() => {
     return cart.map((item) => {
       if (item.type === 'product' || !item.isPromo) {
@@ -278,7 +251,6 @@ export default function SalesTab({
     });
   }, [cart, hasPromoInCart]);
 
-  // CÁLCULOS
   const shippingFee = parseFloat(shippingFeeInput) || 0;
   const driverExtra = parseFloat(driverExtraInput) || 0;
   const itemsTotal = processedCart.reduce((acc, i) => acc + (i.effectivePrice || i.price || 0) * i.qty, 0);
@@ -625,17 +597,10 @@ export default function SalesTab({
                     <h3 className="font-bold text-xs text-slate-100 group-hover:text-fuchsia-400 line-clamp-1">
                       {item.name}
                     </h3>
-                    {/* LA TARJETA EN LA GRILLA MUESTRA SIEMPRE EL TEXTO AUTOMÁTICO PARA PROMOS */}
-                    {item.isPromo ? (
+                    {item.description && (
                       <p className="text-[10px] text-slate-400 line-clamp-1">
-                        {formatPromoDescription(item.items || item.raw?.items, products, item.price)}
+                        {item.description}
                       </p>
-                    ) : (
-                      item.description && (
-                        <p className="text-[10px] text-slate-400 line-clamp-1">
-                          {item.description}
-                        </p>
-                      )
                     )}
                   </div>
 
@@ -659,9 +624,7 @@ export default function SalesTab({
                       )}
                     </div>
 
-                    {/* 🎮 CONTROLES DE LA TARJETA: LUPA TIPO STEAM + MÁS */}
                     <div className="flex items-center gap-1">
-                      {/* BOTÓN LUPA ESTILO STEAM WORKSHOP */}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -674,7 +637,6 @@ export default function SalesTab({
                         <Search className="w-3 h-3 stroke-[2.5]" />
                       </button>
 
-                      {/* BOTÓN MÁS (+) */}
                       <div className={`w-6 h-6 rounded-lg flex items-center justify-center transition shadow ${
                         outOfStock
                           ? 'bg-slate-800/40 text-slate-600'
@@ -1009,12 +971,12 @@ export default function SalesTab({
         </div>
       </div>
 
-      {/* 🎮 MODAL ESTILO STEAM WORKSHOP (CON VINCULACIÓN RECÍPROCA AUTOMÁTICA) */}
+      {/* 🎮 MODAL ESTILO STEAM WORKSHOP */}
       {steamDetailItem && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl space-y-0 relative animate-fadeIn max-h-[90vh] flex flex-col">
             
-            {/* 🖼️ FOTO EN GRANDE CON RESPALDO DE ERRORES */}
+            {/* 🖼️ FOTO EN GRANDE */}
             <div className="h-56 bg-slate-950 relative flex items-center justify-center border-b border-slate-800 flex-shrink-0">
               {steamDetailItem.imageUrl ? (
                 <img
@@ -1030,7 +992,6 @@ export default function SalesTab({
                 />
               ) : null}
 
-              {/* Contenedor de respaldo ("Sin Foto") */}
               <div
                 className={`text-slate-700 flex flex-col items-center gap-1 ${
                   steamDetailItem.imageUrl ? 'hidden' : 'flex'
@@ -1040,7 +1001,6 @@ export default function SalesTab({
                 <span className="text-xs uppercase font-bold text-slate-600">Sin Foto</span>
               </div>
 
-              {/* BOTÓN CERRAR (ARRIBA IZQUIERDA) */}
               <button
                 type="button"
                 onClick={() => setSteamDetailItem(null)}
@@ -1049,7 +1009,6 @@ export default function SalesTab({
                 <X className="w-4 h-4" />
               </button>
 
-              {/* ⚙️ BOTÓN DE SETTINGS / TUERCA (ARRIBA A LA DERECHA) */}
               <button
                 type="button"
                 onClick={() => setIsEditingSteamDesc(!isEditingSteamDesc)}
@@ -1082,9 +1041,7 @@ export default function SalesTab({
                 </span>
               </div>
 
-              {/* ÁREA DE DESCRIPCIÓN Y CONFIGURACIÓN */}
               {isEditingSteamDesc ? (
-                /* MODO EDICIÓN DIRECTO AL TOCAR SETTINGS */
                 <div className="space-y-3 animate-fadeIn">
                   <div>
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
@@ -1099,7 +1056,6 @@ export default function SalesTab({
                     />
                   </div>
 
-                  {/* 🔗 SELECCIÓN MANUAL CON VINCULACIÓN RECÍPROCA AUTOMÁTICA */}
                   <div className="space-y-1.5 pt-2 border-t border-slate-800">
                     <label className="text-[10px] font-bold text-fuchsia-400 uppercase tracking-wider flex items-center gap-1">
                       <Link2 className="w-3.5 h-3.5" /> Vincular Promos Similares (Recíproco 🔄):
@@ -1174,27 +1130,23 @@ export default function SalesTab({
                   </div>
                 </div>
               ) : (
-                /* MODO LECTURA NORMAL */
                 <div className="space-y-2">
                   <div className="flex justify-between items-center text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                     <span>Descripción / Detalles</span>
                   </div>
 
                   <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 text-slate-300 leading-relaxed min-h-[60px]">
-                    {(steamDetailItem.detailDescription || steamDetailItem.description) ? (
-                      <p className="whitespace-pre-line text-slate-200">
-                        {steamDetailItem.detailDescription || steamDetailItem.description}
-                      </p>
+                    {steamDetailItem.detailDescription ? (
+                      <p className="whitespace-pre-line text-slate-200">{steamDetailItem.detailDescription}</p>
                     ) : (
                       <p className="text-slate-600 italic">
-                        Sin descripción cargada. Tocá el ícono ⚙️ arriba a la derecha de la foto para escribir la descripción o vincular promos.
+                        Sin descripción cargada. Tocá el ícono ⚙️ arriba a la derecha de la foto para escribir los detalles.
                       </p>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* 🌟 PROMOS SIMILARES VINCULADAS MANUALMENTE */}
               {!isEditingSteamDesc && activeRelatedPromos.length > 0 && (
                 <div className="space-y-2 pt-2 border-t border-slate-800 animate-fadeIn">
                   <span className="text-[10px] font-bold text-fuchsia-400 uppercase tracking-wider block">
@@ -1232,7 +1184,6 @@ export default function SalesTab({
                 </div>
               )}
 
-              {/* BOTÓN SUMAR AL CARRITO */}
               <button
                 type="button"
                 disabled={steamDetailItem.isPromo ? isPromoOutOfStock(steamDetailItem) : getSafeStock(steamDetailItem.stock) <= 0}
