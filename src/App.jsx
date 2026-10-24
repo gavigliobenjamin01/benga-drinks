@@ -117,11 +117,12 @@ export default function App() {
       setSales(list);
     });
 
-    const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot) => {
-      const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
-      list.sort((a, b) => new Date(b.date) - new Date(a.date));
-      setStockEntries(list);
-    });
+    // Reemplazar la suscripción unsubStockEntries por esta:
+const unsubStockEntries = onSnapshot(collection(db, 'stock_entries'), (snapshot) => {
+  const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
+  list.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  setStockEntries(list);
+});
 
     const unsubWithdrawals = onSnapshot(collection(db, 'withdrawals'), (snapshot) => {
       const list = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
@@ -694,20 +695,19 @@ const handleRegisterStockEntry = async (extraData = {}) => {
 
       // 2. Guardar en la colección de ingresos de stock en Firebase
       await addDoc(collection(db, 'stock_entries'), {
-        entryId,
-        date: new Date().toISOString(),
-        items: entryCart.map((item) => ({
-          id: item.id,
-          name: item.name,
-          qty: item.qty
-        })),
-        paidEfectivo: efct,
-        paidTransferencia: transf,
-        totalCost,
-        paymentSource,
-        montoCajaDescontado: montoCaja
-      });
-
+  entryId, // Ej: "ING-8164"
+  date: new Date().toISOString(),
+  items: entryCart.map((item) => ({
+    id: item.id,
+    name: item.name,
+    qty: item.qty
+  })),
+  paidEfectivo: efct,
+  paidTransferencia: transf,
+  totalCost,
+  paymentSource,
+  montoCajaDescontado: montoCaja
+});
       // 3. Sumar el stock a cada producto en la base de datos
       for (const item of entryCart) {
         const prodRef = doc(db, 'products', item.id);

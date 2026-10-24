@@ -314,7 +314,7 @@ export default function StockEntryTab({
                 <div key={entry.id} className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between gap-3 text-xs">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono font-bold text-fuchsia-400">{entry.id}</span>
+                     <span className="font-mono font-bold text-fuchsia-400">{entry.entryId || entry.id}</span>
                       <span className="text-slate-500 text-[11px] font-mono">{formatDate(entry.date)}</span>
                       
                       {efct > 0 && (
