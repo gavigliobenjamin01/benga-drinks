@@ -17,14 +17,21 @@ export const formatDate = (isoString) => {
 };
 
 export const formatPromoDescription = (promoItems = [], products = [], promoPrice = 0) => {
-  if (!promoItems || promoItems.length === 0) return '';
+  if (!promoItems || !Array.isArray(promoItems) || promoItems.length === 0) return '';
 
   const itemsDetail = [];
   let totalComboCost = 0;
 
   // 1. Obtener datos y sumar el costo base total de todos los componentes
   promoItems.forEach((item) => {
-    const prod = products.find((p) => p.id === item.productId);
+    const targetId = item.productId || item.id;
+    const qty = Number(item.quantity || item.qty || 1);
+    
+    // Búsqueda por ID o por Nombre si falla la ID
+    const prod = products.find(
+      (p) => p.id === targetId || (p.name && item.name && p.name.toLowerCase() === item.name.toLowerCase())
+    );
+
     if (prod) {
       const unitCost = Number(prod.costPrice ?? prod.cost ?? 0);
       const unitSell = Number(prod.sellPrice ?? prod.price ?? 0);
@@ -32,12 +39,19 @@ export const formatPromoDescription = (promoItems = [], products = [], promoPric
       // Se utiliza el costo base; si no está cargado, se usa el precio de venta como alternativa
       const weightFactor = unitCost > 0 ? unitCost : unitSell;
 
-      totalComboCost += weightFactor * item.quantity;
+      totalComboCost += weightFactor * qty;
 
       itemsDetail.push({
         name: prod.name,
-        qty: item.quantity,
+        qty,
         weightFactor
+      });
+    } else if (item.name) {
+      // Resguardo si la promo guarda directo el nombre del producto
+      itemsDetail.push({
+        name: item.name,
+        qty,
+        weightFactor: 0
       });
     }
   });
@@ -49,6 +63,8 @@ export const formatPromoDescription = (promoItems = [], products = [], promoPric
   // 2. Si hay precio de promo cargado y los costos base suman más de 0
   if (numericPromoPrice > 0 && totalComboCost > 0) {
     const formattedItems = itemsDetail.map((item) => {
+      if (item.weightFactor <= 0) return `${item.qty}x ${item.name}`;
+
       // Precio proporcional por unidad asignado según el costo base
       const unitComboPrice = Math.round(numericPromoPrice * (item.weightFactor / totalComboCost));
       const priceText = item.qty > 1 

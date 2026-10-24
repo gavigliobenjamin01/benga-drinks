@@ -22,7 +22,7 @@ import {
   Save,
   Link2
 } from 'lucide-react';
-import { formatCurrency } from '../utils';
+import { formatCurrency, formatPromoDescription } from '../utils';
 
 const getOptimizedImageUrl = (url) => {
   if (!url || typeof url !== 'string') return '';
@@ -105,12 +105,20 @@ export default function SalesTab({
   // 🎮 ABRIR MODAL STEAM WORKSHOP
   const openSteamDetailModal = (item) => {
     setSteamDetailItem(item);
-    setSteamDescInput(item.description || item.raw?.description || '');
+    const initialDetail = item.detailDescription !== undefined
+      ? item.detailDescription
+      : (item.raw?.detailDescription !== undefined
+        ? item.raw.detailDescription
+        : (item.isPromo 
+            ? (item.description || formatPromoDescription(item.items || item.raw?.items, products, item.price))
+            : (item.description || item.raw?.description || '')));
+            
+    setSteamDescInput(initialDetail);
     setSelectedRelatedIds(item.relatedPromoIds || item.raw?.relatedPromoIds || []);
     setIsEditingSteamDesc(false);
   };
 
- // 🎮 GUARDAR CON VINCULACIÓN EN GRUPO COMPLETO (TODAS CON TODAS)
+  // 🎮 GUARDAR DETALLE Y VINCULACIÓN EN GRUPO COMPLETO
   const handleSaveSteamDescription = async () => {
     if (!steamDetailItem) return;
 
@@ -123,18 +131,16 @@ export default function SalesTab({
       // Promos que se desvincularon
       const removedIds = originalIds.filter((id) => !selectedRelatedIds.includes(id));
 
-      // 1. Guardar la descripción y la lista en la promo actual
+      // 1. Guardar la descripción de detalle y la lista en la promo actual
       await updateDoc(doc(db, collectionName, steamDetailItem.id), {
-        description: trimmed,
+        detailDescription: trimmed,
         relatedPromoIds: selectedRelatedIds
       });
 
       // 2. Si es una promo, vincular automáticamente a TODAS las integrantes entre sí
       if (steamDetailItem.isPromo) {
-        // Formamos el grupo completo (la promo actual + todas las seleccionadas)
         const fullGroupIds = [steamDetailItem.id, ...selectedRelatedIds];
 
-        // A cada integrante del grupo le sumamos todos los demás integrantes
         const groupPromises = fullGroupIds.map((memberId) => {
           const otherMembers = fullGroupIds.filter((id) => id !== memberId);
           if (otherMembers.length === 0) return Promise.resolve();
@@ -144,7 +150,6 @@ export default function SalesTab({
           });
         });
 
-        // A las promos que desvinculaste, les quitamos la promo actual
         const removePromises = removedIds.map((targetId) =>
           updateDoc(doc(db, 'promos', targetId), {
             relatedPromoIds: arrayRemove(steamDetailItem.id)
@@ -157,11 +162,11 @@ export default function SalesTab({
       // Actualizar la vista local al instante
       setSteamDetailItem((prev) => ({
         ...prev,
-        description: trimmed,
+        detailDescription: trimmed,
         relatedPromoIds: selectedRelatedIds
       }));
       setIsEditingSteamDesc(false);
-      notify('✨ ¡Grupo completo de promos vinculado entre sí!');
+      notify('✨ ¡Detalles y vinculación guardados!');
     } catch (err) {
       console.error('Error al guardar vinculación en grupo:', err);
       notify('⚠️ Error al guardar en la base de datos');
@@ -203,7 +208,7 @@ export default function SalesTab({
       if (!term) return true;
 
       const nameMatch = (pr.name || '').toLowerCase().includes(term);
-      const descMatch = (pr.description || '').toLowerCase().includes(term);
+      const descMatch = (pr.detailDescription || pr.description || '').toLowerCase().includes(term);
       const itemsMatch = (pr.items || []).some((item) => {
         const pObj = products.find((p) => p.id === item.productId);
         if (!pObj) return false;
@@ -476,10 +481,10 @@ export default function SalesTab({
       link.click();
       notify('📸 Imagen del ticket descargada');
     } catch (err) {
-  notify('⚠️ No se pudo generar la imagen');
-} finally {
-  setIsGeneratingImage(false);
-}
+      notify('⚠️ No se pudo generar la imagen');
+    } finally {
+      setIsGeneratingImage(false);
+    }
   };
 
   const handleShareImage = async () => {
@@ -620,10 +625,17 @@ export default function SalesTab({
                     <h3 className="font-bold text-xs text-slate-100 group-hover:text-fuchsia-400 line-clamp-1">
                       {item.name}
                     </h3>
-                    {item.description && (
+                    {/* LA TARJETA EN LA GRILLA MUESTRA SIEMPRE EL TEXTO AUTOMÁTICO PARA PROMOS */}
+                    {item.isPromo ? (
                       <p className="text-[10px] text-slate-400 line-clamp-1">
-                        {item.description}
+                        {formatPromoDescription(item.items || item.raw?.items, products, item.price)}
                       </p>
+                    ) : (
+                      item.description && (
+                        <p className="text-[10px] text-slate-400 line-clamp-1">
+                          {item.description}
+                        </p>
+                      )
                     )}
                   </div>
 
@@ -1169,8 +1181,10 @@ export default function SalesTab({
                   </div>
 
                   <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 text-slate-300 leading-relaxed min-h-[60px]">
-                    {steamDetailItem.description ? (
-                      <p className="whitespace-pre-line text-slate-200">{steamDetailItem.description}</p>
+                    {(steamDetailItem.detailDescription || steamDetailItem.description) ? (
+                      <p className="whitespace-pre-line text-slate-200">
+                        {steamDetailItem.detailDescription || steamDetailItem.description}
+                      </p>
                     ) : (
                       <p className="text-slate-600 italic">
                         Sin descripción cargada. Tocá el ícono ⚙️ arriba a la derecha de la foto para escribir la descripción o vincular promos.
