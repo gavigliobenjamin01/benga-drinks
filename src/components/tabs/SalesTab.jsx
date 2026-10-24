@@ -603,8 +603,14 @@ export default function SalesTab({
                     </h3>
                     <p className="text-[10px] text-slate-400 line-clamp-1">
                       {item.isPromo
-                        ? (formatPromoDescription(item.items || item.raw?.items, products, item.price) || item.description)
-                        : item.description}
+                        ? (
+                            formatPromoDescription(item.items || item.raw?.items, products, item.price)
+                            || item.description
+                            || (item.items && item.items.map(i => i.name || i.productId).filter(Boolean).join(', '))
+                            || item.detailDescription
+                            || "Combo de bebidas"
+                          )
+                        : (item.description || item.brand || "")}
                     </p>
                   </div>
 
