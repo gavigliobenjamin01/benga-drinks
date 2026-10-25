@@ -29,10 +29,11 @@ const getOptimizedImageUrl = (url) => {
   return url.trim();
 };
 
-// Genera SIEMPRE el texto fijo de botellas para la tarjeta principal (sin mezclar descripciones manuales)
+// Genera SIEMPRE el desglose de productos/botellas dinámicamente, sin leer 'description'
 const getComboItemsText = (promo, productsList = []) => {
   if (!promo) return '';
   const rawItems = promo.items || promo.raw?.items || [];
+  
   if (Array.isArray(rawItems) && rawItems.length > 0) {
     const text = rawItems
       .map((item) => {
@@ -120,15 +121,15 @@ export default function SalesTab({
     });
   };
 
-  // Abre la lupita leyendo ÚNICAMENTE el campo detailDescription
+  // Carga ÚNICAMENTE la propiedad detailDescription en la lupita
   const openSteamDetailModal = (item) => {
     setSteamDetailItem(item);
-    setSteamDescInput(item.detailDescription || item.raw?.detailDescription || '');
+    setSteamDescInput(item.detailDescription || '');
     setSelectedRelatedIds(item.relatedPromoIds || item.raw?.relatedPromoIds || []);
     setIsEditingSteamDesc(false);
   };
 
-  // Guarda en la lupita modificando ÚNICAMENTE detailDescription
+  // Guarda la nota ÚNICAMENTE en detailDescription sin tocar 'description'
   const handleSaveSteamDescription = async () => {
     if (!steamDetailItem) return;
 
@@ -209,7 +210,7 @@ export default function SalesTab({
       if (!term) return true;
 
       const nameMatch = (pr.name || '').toLowerCase().includes(term);
-      const descMatch = (pr.description || pr.detailDescription || '').toLowerCase().includes(term);
+      const descMatch = (pr.detailDescription || '').toLowerCase().includes(term);
       const itemsMatch = (pr.items || []).some((item) => {
         const pObj = products.find((p) => p.id === item.productId);
         if (!pObj) return false;
@@ -624,11 +625,11 @@ export default function SalesTab({
                       {item.name}
                     </h3>
                     
-                    {/* Muestra SIEMPRE el texto fijo de botellas para las promos */}
+                    {/* EN LAS PROMOS MUESTRA SIEMPRE EL TEXTO DINÁMICO DE BOTELLAS */}
                     <p className="text-[10px] text-slate-400 line-clamp-1">
                       {item.isPromo
                         ? getComboItemsText(item, products)
-                        : (item.description || item.brand || "")}
+                        : (item.brand || item.category || "")}
                     </p>
                   </div>
 
@@ -999,7 +1000,7 @@ export default function SalesTab({
         </div>
       </div>
 
-      {/* 🎮 MODAL DE LA LUPITA (MANEJA EXCLUSIVAMENTE DETAIL DESCRIPTION) */}
+      {/* 🎮 MODAL DE LA LUPITA (USO EXCLUSIVO DE DETAIL DESCRIPTION) */}
       {steamDetailItem && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl space-y-0 relative animate-fadeIn max-h-[90vh] flex flex-col">
@@ -1291,9 +1292,9 @@ export default function SalesTab({
                         <span>{item.qty}x {item.name}</span>
                         <span className="font-bold">{formatCurrency((item.price || item.effectivePrice || 0) * item.qty)}</span>
                       </div>
-                      {item.raw?.description && (
+                      {item.raw?.detailDescription && (
                         <div className="text-[9px] text-fuchsia-300 pl-2">
-                          + {item.raw.description}
+                          + {item.raw.detailDescription}
                         </div>
                       )}
                     </div>
