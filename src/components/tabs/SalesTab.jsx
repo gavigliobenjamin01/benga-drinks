@@ -22,11 +22,30 @@ import {
   Save,
   Link2
 } from 'lucide-react';
-import { formatCurrency, formatPromoDescription } from '../utils';
+import { formatCurrency } from '../utils';
 
 const getOptimizedImageUrl = (url) => {
   if (!url || typeof url !== 'string') return '';
   return url.trim();
+};
+
+// HELPER FIJO: Arma la lista de botellas del combo con sus precios para la tarjeta
+const getComboItemsText = (promo, productsList) => {
+  if (!promo) return '';
+  const rawItems = promo.items || promo.raw?.items || [];
+  if (rawItems.length > 0) {
+    return rawItems
+      .map((item) => {
+        const prod = productsList.find((p) => p.id === (item.productId || item.id));
+        const name = prod ? prod.name : (item.name || 'Producto');
+        const price = prod ? (prod.sellPrice ?? prod.price ?? 0) : 0;
+        const qty = item.quantity || item.qty || 1;
+        const priceFormatted = price > 0 ? ` ($${price.toLocaleString('es-AR')})` : '';
+        return `${qty}x ${name}${priceFormatted}`;
+      })
+      .join(' + ');
+  }
+  return promo.description || 'Combo de bebidas';
 };
 
 export default function SalesTab({
@@ -95,7 +114,6 @@ export default function SalesTab({
     });
   };
 
-  // APERTURA DEL MODAL: SOLO USA DETAIL DESCRIPTION (INDIVIDUAL)
   const openSteamDetailModal = (item) => {
     setSteamDetailItem(item);
     setSteamDescInput(item.detailDescription || item.raw?.detailDescription || '');
@@ -103,7 +121,6 @@ export default function SalesTab({
     setIsEditingSteamDesc(false);
   };
 
-  // GUARDA EL DETALLE SIN TOCAR LA DESCRIPCIÓN DE LA GRILLA
   const handleSaveSteamDescription = async () => {
     if (!steamDetailItem) return;
 
@@ -146,7 +163,7 @@ export default function SalesTab({
         relatedPromoIds: selectedRelatedIds
       }));
       setIsEditingSteamDesc(false);
-      notify('✨ ¡Detalles de la ficha guardados!');
+      notify('✨ ¡Detalles guardados!');
     } catch (err) {
       console.error('Error al guardar en la base de datos:', err);
       notify('⚠️ Error al guardar en la base de datos');
@@ -599,15 +616,10 @@ export default function SalesTab({
                       {item.name}
                     </h3>
                     
-                    {/* LA TARJETA MUESTRA SIEMPRE Y DE FORMA FIJA LA LISTA DE BEBIDAS PREHECHA */}
+                    {/* LA TARJETA EN LA GRILLA MUESTRA SIEMPRE LA LISTA DE BOTELLAS Y NUNCA EL DETAIL DESCRIPTION */}
                     <p className="text-[10px] text-slate-400 line-clamp-1">
                       {item.isPromo
-                        ? (
-                            formatPromoDescription(item.items || item.raw?.items, products, item.price)
-                            || item.description
-                            || (Array.isArray(item.items) && item.items.map(i => i.name || i.productId).filter(Boolean).join(' + '))
-                            || "Combo de bebidas"
-                          )
+                        ? getComboItemsText(item, products)
                         : (item.description || item.brand || "")}
                     </p>
                   </div>
@@ -979,7 +991,7 @@ export default function SalesTab({
         </div>
       </div>
 
-      {/* 🎮 MODAL ESTILO STEAM WORKSHOP (PESTAÑA DE DETALLES INDEPENDIENTE) */}
+      {/* 🎮 MODAL ESTILO STEAM WORKSHOP (LA DESCRIPCIÓN ACÁ ES 100% INDEPENDIENTE) */}
       {steamDetailItem && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl space-y-0 relative animate-fadeIn max-h-[90vh] flex flex-col">
@@ -1051,13 +1063,13 @@ export default function SalesTab({
                 <div className="space-y-3 animate-fadeIn">
                   <div>
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Descripción Personalizada de la Ficha:
+                      Descripción / Detalles:
                     </label>
                     <textarea
                       rows="3"
                       value={steamDescInput}
                       onChange={(e) => setSteamDescInput(e.target.value)}
-                      placeholder="Escribí acá el detalle adicional (Ej: Rinde para 4 jarras / Incluye sorbetes)..."
+                      placeholder="Escribí acá el detalle adicional (Ej: rinde 3 personas)..."
                       className="w-full bg-slate-950 border border-fuchsia-500/60 rounded-2xl p-3 text-white text-xs focus:outline-none focus:border-fuchsia-500 shadow-inner"
                     />
                   </div>
@@ -1141,21 +1153,15 @@ export default function SalesTab({
                     <span>Descripción / Detalles</span>
                   </div>
 
-                  {/* VISTA DE LECTURA DE LA FICHA DETALLADA */}
                   <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 text-slate-300 leading-relaxed min-h-[60px]">
                     {steamDetailItem.detailDescription ? (
                       <p className="whitespace-pre-line text-slate-200">
                         {steamDetailItem.detailDescription}
                       </p>
                     ) : (
-                      <div className="space-y-1">
-                        <p className="text-slate-300 font-medium">
-                          {formatPromoDescription(steamDetailItem.items || steamDetailItem.raw?.items, products, steamDetailItem.price) || steamDetailItem.description}
-                        </p>
-                        <p className="text-[11px] text-slate-500 italic">
-                          Tocá la tuerca ⚙️ arriba a la derecha si querés agregar notas o detalles personalizados para esta ficha.
-                        </p>
-                      </div>
+                      <p className="text-slate-500 italic">
+                        Sin detalles adicionales. Tocá el ícono ⚙️ arriba a la derecha de la foto para escribir notas o detalles para esta pestaña.
+                      </p>
                     )}
                   </div>
                 </div>
