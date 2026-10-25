@@ -29,21 +29,27 @@ const getOptimizedImageUrl = (url) => {
   return url.trim();
 };
 
-// HELPER FIJO: Arma la lista de botellas del combo con sus precios para la tarjeta
-const getComboItemsText = (promo, productsList) => {
+// Genera SIEMPRE el texto fijo de botellas para la tarjeta
+const getComboItemsText = (promo, productsList = []) => {
   if (!promo) return '';
   const rawItems = promo.items || promo.raw?.items || [];
-  if (rawItems.length > 0) {
-    return rawItems
+  if (Array.isArray(rawItems) && rawItems.length > 0) {
+    const text = rawItems
       .map((item) => {
-        const prod = productsList.find((p) => p.id === (item.productId || item.id));
+        const targetId = item.productId || item.id;
+        const prod = productsList.find(
+          (p) => p.id === targetId || (p.name && item.name && p.name.toLowerCase() === item.name.toLowerCase())
+        );
         const name = prod ? prod.name : (item.name || 'Producto');
         const price = prod ? (prod.sellPrice ?? prod.price ?? 0) : 0;
         const qty = item.quantity || item.qty || 1;
         const priceFormatted = price > 0 ? ` ($${price.toLocaleString('es-AR')})` : '';
         return `${qty}x ${name}${priceFormatted}`;
       })
+      .filter(Boolean)
       .join(' + ');
+
+    if (text) return text;
   }
   return promo.description || 'Combo de bebidas';
 };
@@ -131,6 +137,7 @@ export default function SalesTab({
       const originalIds = steamDetailItem.relatedPromoIds || steamDetailItem.raw?.relatedPromoIds || [];
       const removedIds = originalIds.filter((id) => !selectedRelatedIds.includes(id));
 
+      // GUARDA EXCLUSIVAMENTE EN detailDescription
       await updateDoc(doc(db, collectionName, steamDetailItem.id), {
         detailDescription: trimmed,
         relatedPromoIds: selectedRelatedIds
@@ -163,7 +170,7 @@ export default function SalesTab({
         relatedPromoIds: selectedRelatedIds
       }));
       setIsEditingSteamDesc(false);
-      notify('✨ ¡Detalles guardados!');
+      notify('✨ Detalle de la ficha guardado');
     } catch (err) {
       console.error('Error al guardar en la base de datos:', err);
       notify('⚠️ Error al guardar en la base de datos');
@@ -616,7 +623,7 @@ export default function SalesTab({
                       {item.name}
                     </h3>
                     
-                    {/* LA TARJETA EN LA GRILLA MUESTRA SIEMPRE LA LISTA DE BOTELLAS Y NUNCA EL DETAIL DESCRIPTION */}
+                    {/* LA TARJETA DE LA GRILLA GENERA SIEMPRE EL TEXTO DE BOTELLAS */}
                     <p className="text-[10px] text-slate-400 line-clamp-1">
                       {item.isPromo
                         ? getComboItemsText(item, products)
@@ -991,7 +998,7 @@ export default function SalesTab({
         </div>
       </div>
 
-      {/* 🎮 MODAL ESTILO STEAM WORKSHOP (LA DESCRIPCIÓN ACÁ ES 100% INDEPENDIENTE) */}
+      {/* 🎮 MODAL DE LA LUPA (TRABAJA SOLAMENTE CON DETAIL DESCRIPTION) */}
       {steamDetailItem && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl space-y-0 relative animate-fadeIn max-h-[90vh] flex flex-col">
