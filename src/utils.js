@@ -38,20 +38,21 @@ export const formatPromoDescription = (promoItems = [], products = [], promoPric
       
       // Se utiliza el costo base; si no está cargado, se usa el precio de venta como alternativa
       const weightFactor = unitCost > 0 ? unitCost : unitSell;
+      const totalWeight = weightFactor * qty;
 
-      totalComboCost += weightFactor * qty;
+      totalComboCost += totalWeight;
 
       itemsDetail.push({
         name: prod.name,
         qty,
-        weightFactor
+        totalWeight
       });
     } else if (item.name) {
       // Resguardo si la promo guarda directo el nombre del producto
       itemsDetail.push({
         name: item.name,
         qty,
-        weightFactor: 0
+        totalWeight: 0
       });
     }
   });
@@ -62,14 +63,44 @@ export const formatPromoDescription = (promoItems = [], products = [], promoPric
 
   // 2. Si hay precio de promo cargado y los costos base suman más de 0
   if (numericPromoPrice > 0 && totalComboCost > 0) {
-    const formattedItems = itemsDetail.map((item) => {
-      if (item.weightFactor <= 0) return `${item.qty}x ${item.name}`;
+    let allocatedTotalSum = 0;
 
-      // Precio proporcional por unidad asignado según el costo base
-      const unitComboPrice = Math.round(numericPromoPrice * (item.weightFactor / totalComboCost));
+    // Calculamos y redondeamos el total de cada producto a múltiplos de $10
+    const itemsAllocated = itemsDetail.map((item) => {
+      if (item.totalWeight <= 0) return { ...item, allocatedTotal: 0 };
+
+      const exactProportion = numericPromoPrice * (item.totalWeight / totalComboCost);
+      const roundedTotal = Math.round(exactProportion / 10) * 10;
+      allocatedTotalSum += roundedTotal;
+
+      return {
+        ...item,
+        allocatedTotal: roundedTotal
+      };
+    });
+
+    // Ajustamos cualquier diferencia de $10 en el producto de mayor valor para que sume exacto
+    const diff = numericPromoPrice - allocatedTotalSum;
+    if (diff !== 0 && itemsAllocated.length > 0) {
+      let maxIdx = 0;
+      let maxVal = -1;
+      itemsAllocated.forEach((item, idx) => {
+        if (item.totalWeight > maxVal) {
+          maxVal = item.totalWeight;
+          maxIdx = idx;
+        }
+      });
+      itemsAllocated[maxIdx].allocatedTotal += diff;
+    }
+
+    // 3. Generamos las etiquetas de texto con precios terminados en 0
+    const formattedItems = itemsAllocated.map((item) => {
+      if (item.totalWeight <= 0) return `${item.qty}x ${item.name}`;
+
+      const unitPrice = Math.round(item.allocatedTotal / item.qty / 10) * 10;
       const priceText = item.qty > 1 
-        ? `$${unitComboPrice.toLocaleString('es-AR')} c/u` 
-        : `$${unitComboPrice.toLocaleString('es-AR')}`;
+        ? `$${unitPrice.toLocaleString('es-AR')} c/u` 
+        : `$${item.allocatedTotal.toLocaleString('es-AR')}`;
 
       return `${item.qty}x ${item.name} (${priceText})`;
     });
