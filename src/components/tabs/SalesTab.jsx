@@ -29,7 +29,7 @@ const getOptimizedImageUrl = (url) => {
   return url.trim();
 };
 
-// Genera SIEMPRE el texto fijo de botellas para la tarjeta principal
+// Genera SIEMPRE el texto fijo de botellas para la tarjeta principal (sin mezclar descripciones manuales)
 const getComboItemsText = (promo, productsList = []) => {
   if (!promo) return '';
   const rawItems = promo.items || promo.raw?.items || [];
@@ -51,7 +51,7 @@ const getComboItemsText = (promo, productsList = []) => {
 
     if (text) return text;
   }
-  return promo.description || 'Combo de bebidas';
+  return 'Combo de bebidas';
 };
 
 export default function SalesTab({
@@ -120,16 +120,15 @@ export default function SalesTab({
     });
   };
 
-  // APERTURA DE LUPITA: Lee ÚNICAMENTE el campo detailDescription
+  // Abre la lupita leyendo ÚNICAMENTE el campo detailDescription
   const openSteamDetailModal = (item) => {
     setSteamDetailItem(item);
-    const customNotes = item.detailDescription || item.raw?.detailDescription || '';
-    setSteamDescInput(customNotes);
+    setSteamDescInput(item.detailDescription || item.raw?.detailDescription || '');
     setSelectedRelatedIds(item.relatedPromoIds || item.raw?.relatedPromoIds || []);
     setIsEditingSteamDesc(false);
   };
 
-  // GUARDADO DE LUPITA: Actualiza ÚNICAMENTE detailDescription
+  // Guarda en la lupita modificando ÚNICAMENTE detailDescription
   const handleSaveSteamDescription = async () => {
     if (!steamDetailItem) return;
 
@@ -228,7 +227,7 @@ export default function SalesTab({
     }
 
     let matchingPromos = [];
-    if (selectedCategory === 'Todas' && term) {
+    if (selectedCategory === 'Todas') {
       matchingPromos = promos.filter(promoMatches).map((pr) => ({ ...pr, isPromo: true }));
     }
 
@@ -625,7 +624,7 @@ export default function SalesTab({
                       {item.name}
                     </h3>
                     
-                    {/* LA TARJETA PRINCIPAL MUESTRA SIEMPRE EL TEXTO DINÁMICO DE BOTELLAS */}
+                    {/* Muestra SIEMPRE el texto fijo de botellas para las promos */}
                     <p className="text-[10px] text-slate-400 line-clamp-1">
                       {item.isPromo
                         ? getComboItemsText(item, products)
@@ -1000,7 +999,7 @@ export default function SalesTab({
         </div>
       </div>
 
-      {/* 🎮 MODAL DE LA LUPITA (USA EXCLUSIVAMENTE DETAIL DESCRIPTION) */}
+      {/* 🎮 MODAL DE LA LUPITA (MANEJA EXCLUSIVAMENTE DETAIL DESCRIPTION) */}
       {steamDetailItem && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl space-y-0 relative animate-fadeIn max-h-[90vh] flex flex-col">
@@ -1078,7 +1077,7 @@ export default function SalesTab({
                       rows="3"
                       value={steamDescInput}
                       onChange={(e) => setSteamDescInput(e.target.value)}
-                      placeholder="Escribí acá el detalle adicional para la ficha (Ej: Rinde 3 personas, servir bien frío)..."
+                      placeholder="Escribí acá el detalle adicional para la ficha (Ej: Rinde 4 personas, servir muy frío)..."
                       className="w-full bg-slate-950 border border-fuchsia-500/60 rounded-2xl p-3 text-white text-xs focus:outline-none focus:border-fuchsia-500 shadow-inner"
                     />
                   </div>
