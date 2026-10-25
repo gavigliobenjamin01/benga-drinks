@@ -1,6 +1,25 @@
 import React from 'react';
 import { Plus, Pencil, Trash2, Power, Sparkles, TrendingUp } from 'lucide-react';
-import { formatCurrency, formatPromoDescription } from '../utils';
+import { formatCurrency } from '../utils';
+
+// HELPER FIJO: Garantiza el formato de botellas para la tarjeta de la pestaña Promos
+const getComboItemsText = (promo, productsList) => {
+  if (!promo) return '';
+  const rawItems = promo.items || [];
+  if (rawItems.length > 0) {
+    return rawItems
+      .map((item) => {
+        const prod = productsList.find((p) => p.id === (item.productId || item.id));
+        const name = prod ? prod.name : (item.name || 'Producto');
+        const price = prod ? (prod.sellPrice ?? prod.price ?? 0) : 0;
+        const qty = item.quantity || item.qty || 1;
+        const priceFormatted = price > 0 ? ` ($${price.toLocaleString('es-AR')})` : '';
+        return `${qty}x ${name}${priceFormatted}`;
+      })
+      .join(' + ');
+  }
+  return promo.description || 'Combo de bebidas';
+};
 
 export default function PromosTab({
   promos = [],
@@ -46,8 +65,6 @@ export default function PromosTab({
             }, 0);
             const promoProfit = (promo.price || 0) - promoCost;
 
-            const comboContentText = formatPromoDescription(promo.items, products, promo.price) || promo.description;
-
             return (
               <div
                 key={promo.id}
@@ -75,25 +92,11 @@ export default function PromosTab({
                   </button>
                 </div>
 
-                {/* CONTENIDO Y DETALLES DEL COMBO */}
-                <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80 space-y-1.5">
-                  <span className="text-[10px] font-bold text-fuchsia-400 uppercase tracking-wider block">
-                    Contenido del Combo:
-                  </span>
+                {/* LA MUESTRA DE BOTELLAS ES FIJA Y NUNCA SE REEMPLAZA POR DETAIL DESCRIPTION */}
+                <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80">
                   <p className="text-xs text-slate-200 font-medium">
-                    {comboContentText || "Sin bebidas especificadas"}
+                    {getComboItemsText(promo, products)}
                   </p>
-
-                  {promo.detailDescription && (
-                    <div className="pt-1.5 border-t border-slate-800/80">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase block">
-                        Detalle Adicional (Ficha):
-                      </span>
-                      <p className="text-[11px] text-slate-300 italic whitespace-pre-line">
-                        📝 {promo.detailDescription}
-                      </p>
-                    </div>
-                  )}
                 </div>
 
                 {/* DESGLOSE DE PRECIO Y GANANCIA DE LA PROMO */}
