@@ -85,6 +85,7 @@ export default function PromoModal({
               <button
                 type="button"
                 onClick={() => {
+                  if (!selectedProdForPromo) return;
                   onAddProductToPromo(selectedProdForPromo);
                   setSelectedProdForPromo('');
                 }}
