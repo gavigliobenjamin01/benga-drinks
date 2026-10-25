@@ -22,37 +22,21 @@ import {
   Save,
   Link2
 } from 'lucide-react';
-import { formatCurrency } from "../../utils";
+import { formatCurrency, formatPromoDescription } from "../../utils";
 
 const getOptimizedImageUrl = (url) => {
   if (!url || typeof url !== 'string') return '';
   return url.trim();
 };
 
-// Genera SIEMPRE el desglose de productos/botellas dinámicamente, sin leer 'description'
+// Genera el desglose proporcional exacto en base al precio del combo usando utils
 const getComboItemsText = (promo, productsList = []) => {
   if (!promo) return '';
   const rawItems = promo.items || promo.raw?.items || [];
-  
-  if (Array.isArray(rawItems) && rawItems.length > 0) {
-    const text = rawItems
-      .map((item) => {
-        const targetId = item.productId || item.id;
-        const prod = productsList.find(
-          (p) => p.id === targetId || (p.name && item.name && p.name.toLowerCase() === item.name.toLowerCase())
-        );
-        const name = prod ? prod.name : (item.name || 'Producto');
-        const price = prod ? (prod.sellPrice ?? prod.price ?? 0) : 0;
-        const qty = item.quantity || item.qty || 1;
-        const priceFormatted = price > 0 ? ` ($${price.toLocaleString('es-AR')})` : '';
-        return `${qty}x ${name}${priceFormatted}`;
-      })
-      .filter(Boolean)
-      .join(' + ');
+  const promoPrice = promo.price || promo.comboPrice || 0;
 
-    if (text) return text;
-  }
-  return 'Combo de bebidas';
+  const formatted = formatPromoDescription(rawItems, productsList, promoPrice);
+  return formatted || 'Combo de bebidas';
 };
 
 export default function SalesTab({
@@ -625,7 +609,7 @@ export default function SalesTab({
                       {item.name}
                     </h3>
                     
-                    {/* EN LAS PROMOS MUESTRA SIEMPRE EL TEXTO DINÁMICO DE BOTELLAS */}
+                    {/* EN LAS PROMOS MUESTRA SIEMPRE EL TEXTO DINÁMICO PROPORCIONAL */}
                     <p className="text-[10px] text-slate-400 line-clamp-1">
                       {item.isPromo
                         ? getComboItemsText(item, products)

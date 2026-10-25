@@ -1,29 +1,15 @@
 import React from 'react';
 import { Plus, Pencil, Trash2, Power, Sparkles, TrendingUp } from 'lucide-react';
-import { formatCurrency } from "../../utils";
-// Genera SIEMPRE el texto fijo de botellas para la tarjeta
+import { formatCurrency, formatPromoDescription } from "../../utils";
+
+// Genera el desglose proporcional exacto en base al precio total del combo
 const getComboItemsText = (promo, productsList = []) => {
   if (!promo) return '';
-  const rawItems = promo.items || [];
-  if (Array.isArray(rawItems) && rawItems.length > 0) {
-    const text = rawItems
-      .map((item) => {
-        const targetId = item.productId || item.id;
-        const prod = productsList.find(
-          (p) => p.id === targetId || (p.name && item.name && p.name.toLowerCase() === item.name.toLowerCase())
-        );
-        const name = prod ? prod.name : (item.name || 'Producto');
-        const price = prod ? (prod.sellPrice ?? prod.price ?? 0) : 0;
-        const qty = item.quantity || item.qty || 1;
-        const priceFormatted = price > 0 ? ` ($${price.toLocaleString('es-AR')})` : '';
-        return `${qty}x ${name}${priceFormatted}`;
-      })
-      .filter(Boolean)
-      .join(' + ');
+  const rawItems = promo.items || promo.raw?.items || [];
+  const promoPrice = promo.price || promo.comboPrice || 0;
 
-    if (text) return text;
-  }
-  return promo.description || 'Combo de bebidas';
+  const formatted = formatPromoDescription(rawItems, productsList, promoPrice);
+  return formatted || promo.description || 'Combo de bebidas';
 };
 
 export default function PromosTab({
@@ -97,7 +83,7 @@ export default function PromosTab({
                   </button>
                 </div>
 
-                {/* LA MUESTRA DE BOTELLAS ES FIJA Y DINÁMICA */}
+                {/* DESGLOSE PROPORCIONAL DE BOTELLAS */}
                 <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80">
                   <p className="text-xs text-slate-200 font-medium">
                     {getComboItemsText(promo, products)}
