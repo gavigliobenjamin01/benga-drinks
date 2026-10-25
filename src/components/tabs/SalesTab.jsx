@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { toPng } from 'html-to-image';
 import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db } from "../../firebase";
 import {
   Search,
   Plus,
@@ -22,7 +22,7 @@ import {
   Save,
   Link2
 } from 'lucide-react';
-import { formatCurrency } from '../utils';
+import { formatCurrency } from "../../utils";
 
 const getOptimizedImageUrl = (url) => {
   if (!url || typeof url !== 'string') return '';

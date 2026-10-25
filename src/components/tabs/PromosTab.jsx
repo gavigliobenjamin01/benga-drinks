@@ -1,7 +1,6 @@
 import React from 'react';
 import { Plus, Pencil, Trash2, Power, Sparkles, TrendingUp } from 'lucide-react';
-import { formatCurrency } from '../utils';
-
+import { formatCurrency } from "../../utils";
 // Genera SIEMPRE el texto fijo de botellas para la tarjeta
 const getComboItemsText = (promo, productsList = []) => {
   if (!promo) return '';

@@ -10,7 +10,7 @@ import {
   MapPin,
   Edit // <-- Importamos el ícono de edición
 } from 'lucide-react';
-import { formatCurrency, formatDate } from '../utils';
+import { formatCurrency, formatDate } from "../../utils";
 
 export default function DashboardTab({
   sales,

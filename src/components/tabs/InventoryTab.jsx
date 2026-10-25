@@ -1,6 +1,7 @@
 import React from 'react';
 import { Plus, Pencil, Trash2, HandCoins } from 'lucide-react';
-import { formatCurrency } from '../utils';
+import { db } from "../../firebase";
+import { formatCurrency } from "../../utils";
 
 export default function InventoryTab({
   inventoryCategories,

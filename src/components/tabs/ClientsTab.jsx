@@ -1,8 +1,8 @@
 import React from 'react';
 import { UserPlus, Trash2 } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase';
-import { formatCurrency } from '../utils';
+import { db } from "../../firebase";
+import { formatCurrency } from "../../utils";
 
 export default function ClientsTab({
   clients,

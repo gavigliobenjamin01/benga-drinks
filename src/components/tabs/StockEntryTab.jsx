@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Search, Plus, Trash2, PackageCheck, History, Receipt, DollarSign } from 'lucide-react';
-import { formatCurrency, formatDate } from '../utils';
+import { formatCurrency, formatDate } from "../../utils";
 
 export default function StockEntryTab({
   products,
