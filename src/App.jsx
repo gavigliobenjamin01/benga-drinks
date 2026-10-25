@@ -11,7 +11,7 @@ import { db } from "./firebase";
 import { formatCurrency, formatPromoDescription } from "./utils";
 
 // Custom Hook
-import useAppData from "./hooks/useAppData";
+import { useAppData } from "./hooks/useAppData";
 
 // Layout
 import Sidebar from "./components/layout/Sidebar";
