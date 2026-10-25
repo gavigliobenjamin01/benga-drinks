@@ -29,7 +29,7 @@ const getOptimizedImageUrl = (url) => {
   return url.trim();
 };
 
-// Genera SIEMPRE el texto fijo de botellas para la tarjeta
+// Genera SIEMPRE el texto fijo de botellas para la tarjeta principal
 const getComboItemsText = (promo, productsList = []) => {
   if (!promo) return '';
   const rawItems = promo.items || promo.raw?.items || [];
@@ -120,13 +120,16 @@ export default function SalesTab({
     });
   };
 
+  // APERTURA DE LUPITA: Lee ÚNICAMENTE el campo detailDescription
   const openSteamDetailModal = (item) => {
     setSteamDetailItem(item);
-    setSteamDescInput(item.detailDescription || item.raw?.detailDescription || '');
+    const customNotes = item.detailDescription || item.raw?.detailDescription || '';
+    setSteamDescInput(customNotes);
     setSelectedRelatedIds(item.relatedPromoIds || item.raw?.relatedPromoIds || []);
     setIsEditingSteamDesc(false);
   };
 
+  // GUARDADO DE LUPITA: Actualiza ÚNICAMENTE detailDescription
   const handleSaveSteamDescription = async () => {
     if (!steamDetailItem) return;
 
@@ -137,7 +140,6 @@ export default function SalesTab({
       const originalIds = steamDetailItem.relatedPromoIds || steamDetailItem.raw?.relatedPromoIds || [];
       const removedIds = originalIds.filter((id) => !selectedRelatedIds.includes(id));
 
-      // GUARDA EXCLUSIVAMENTE EN detailDescription
       await updateDoc(doc(db, collectionName, steamDetailItem.id), {
         detailDescription: trimmed,
         relatedPromoIds: selectedRelatedIds
@@ -623,7 +625,7 @@ export default function SalesTab({
                       {item.name}
                     </h3>
                     
-                    {/* LA TARJETA DE LA GRILLA GENERA SIEMPRE EL TEXTO DE BOTELLAS */}
+                    {/* LA TARJETA PRINCIPAL MUESTRA SIEMPRE EL TEXTO DINÁMICO DE BOTELLAS */}
                     <p className="text-[10px] text-slate-400 line-clamp-1">
                       {item.isPromo
                         ? getComboItemsText(item, products)
@@ -998,7 +1000,7 @@ export default function SalesTab({
         </div>
       </div>
 
-      {/* 🎮 MODAL DE LA LUPA (TRABAJA SOLAMENTE CON DETAIL DESCRIPTION) */}
+      {/* 🎮 MODAL DE LA LUPITA (USA EXCLUSIVAMENTE DETAIL DESCRIPTION) */}
       {steamDetailItem && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl space-y-0 relative animate-fadeIn max-h-[90vh] flex flex-col">
@@ -1070,13 +1072,13 @@ export default function SalesTab({
                 <div className="space-y-3 animate-fadeIn">
                   <div>
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                      Descripción / Detalles:
+                      Descripción / Detalles de la Lupita:
                     </label>
                     <textarea
                       rows="3"
                       value={steamDescInput}
                       onChange={(e) => setSteamDescInput(e.target.value)}
-                      placeholder="Escribí acá el detalle adicional (Ej: rinde 3 personas)..."
+                      placeholder="Escribí acá el detalle adicional para la ficha (Ej: Rinde 3 personas, servir bien frío)..."
                       className="w-full bg-slate-950 border border-fuchsia-500/60 rounded-2xl p-3 text-white text-xs focus:outline-none focus:border-fuchsia-500 shadow-inner"
                     />
                   </div>
