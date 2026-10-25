@@ -20,7 +20,8 @@ import {
   ChevronUp,
   Settings,
   Save,
-  Link2
+  Link2,
+  Filter
 } from 'lucide-react';
 import { formatCurrency, formatPromoDescription } from "../../utils";
 
@@ -29,7 +30,7 @@ const getOptimizedImageUrl = (url) => {
   return url.trim();
 };
 
-// Genera el desglose proporcional exacto en base al precio del combo usando utils
+// Genera el desglose proporcional exacto en base al precio del combo
 const getComboItemsText = (promo, productsList = []) => {
   if (!promo) return '';
   const rawItems = promo.items || promo.raw?.items || [];
@@ -50,6 +51,7 @@ export default function SalesTab({
   const [cart, setCart] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Todas');
+  const [selectedPromoCategory, setSelectedPromoCategory] = useState('Todas'); // Sub-filtro de promos
   const [selectedClient, setSelectedClient] = useState('Cliente Casual');
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
   const [paidEfectivoInput, setPaidEfectivoInput] = useState('');
@@ -105,7 +107,6 @@ export default function SalesTab({
     });
   };
 
-  // Carga ÚNICAMENTE la propiedad detailDescription en la lupita
   const openSteamDetailModal = (item) => {
     setSteamDetailItem(item);
     setSteamDescInput(item.detailDescription || '');
@@ -113,7 +114,6 @@ export default function SalesTab({
     setIsEditingSteamDesc(false);
   };
 
-  // Guarda la nota ÚNICAMENTE en detailDescription sin tocar 'description'
   const handleSaveSteamDescription = async () => {
     if (!steamDetailItem) return;
 
@@ -186,17 +186,44 @@ export default function SalesTab({
     return ['Todas', '🔥 Promos & Combos', ...cats];
   }, [products]);
 
+  // Genera dinámicamente las sub-categorías presentes dentro de los combos existentes
+  const promoSubCategories = useMemo(() => {
+    const subCats = new Set();
+    promos.forEach((pr) => {
+      (pr.items || []).forEach((item) => {
+        const targetId = item.productId || item.id;
+        const pObj = products.find((p) => p.id === targetId);
+        if (pObj && pObj.category) {
+          subCats.add(pObj.category);
+        }
+      });
+    });
+    return ['Todas', ...Array.from(subCats)];
+  }, [promos, products]);
+
   const filteredCatalog = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
 
     const promoMatches = (pr) => {
       if (pr.active === false) return false;
+
+      // Filtrado por Sub-Categoría de Promos
+      if (selectedPromoCategory !== 'Todas') {
+        const containsCategory = (pr.items || []).some((item) => {
+          const targetId = item.productId || item.id;
+          const pObj = products.find((p) => p.id === targetId);
+          return pObj && (pObj.category || '').toLowerCase() === selectedPromoCategory.toLowerCase();
+        });
+        if (!containsCategory) return false;
+      }
+
       if (!term) return true;
 
       const nameMatch = (pr.name || '').toLowerCase().includes(term);
       const descMatch = (pr.detailDescription || '').toLowerCase().includes(term);
       const itemsMatch = (pr.items || []).some((item) => {
-        const pObj = products.find((p) => p.id === item.productId);
+        const targetId = item.productId || item.id;
+        const pObj = products.find((p) => p.id === targetId);
         if (!pObj) return false;
         return (
           (pObj.name || '').toLowerCase().includes(term) ||
@@ -232,7 +259,7 @@ export default function SalesTab({
     const matchingProducts = prods.map((p) => ({ ...p, isPromo: false }));
 
     return [...matchingPromos, ...matchingProducts];
-  }, [products, promos, searchTerm, selectedCategory]);
+  }, [products, promos, searchTerm, selectedCategory, selectedPromoCategory]);
 
   const hasPromoInCart = useMemo(() => {
     return cart.some((item) => item.type === 'promo' || item.isPromo || (item.name || '').toLowerCase().includes('combo'));
@@ -521,7 +548,12 @@ export default function SalesTab({
             {categories.map((cat) => (
               <button
                 key={cat}
-                onClick={() => setSelectedCategory(cat)}
+                onClick={() => {
+                  setSelectedCategory(cat);
+                  if (cat !== '🔥 Promos & Combos') {
+                    setSelectedPromoCategory('Todas');
+                  }
+                }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition border ${
                   selectedCategory === cat
                     ? 'bg-fuchsia-500 text-slate-950 border-fuchsia-400 shadow-md shadow-fuchsia-500/20'
@@ -532,6 +564,31 @@ export default function SalesTab({
               </button>
             ))}
           </div>
+
+          {/* SUB-FILTRO: ¿Qué tipo de promos buscás? (Solo visible al seleccionar '🔥 Promos & Combos') */}
+          {selectedCategory === '🔥 Promos & Combos' && (
+            <div className="bg-slate-950/80 p-3 rounded-2xl border border-fuchsia-500/30 space-y-2 animate-fadeIn">
+              <span className="text-[11px] font-bold text-fuchsia-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Filter className="w-3.5 h-3.5 text-fuchsia-400" /> ¿Qué tipo de promos buscás?
+              </span>
+              <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+                {promoSubCategories.map((subCat) => (
+                  <button
+                    key={subCat}
+                    type="button"
+                    onClick={() => setSelectedPromoCategory(subCat)}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition border ${
+                      selectedPromoCategory === subCat
+                        ? 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/60 shadow-sm'
+                        : 'bg-slate-900 text-slate-400 border-slate-800/80 hover:border-slate-700 hover:text-slate-200'
+                    }`}
+                  >
+                    {subCat === 'Todas' ? '🍹 Todas las Promos' : subCat}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* GRILLA VISUAL DE PRODUCTOS/PROMOS CON FOTO */}
@@ -609,7 +666,6 @@ export default function SalesTab({
                       {item.name}
                     </h3>
                     
-                    {/* EN LAS PROMOS MUESTRA SIEMPRE EL TEXTO DINÁMICO PROPORCIONAL */}
                     <p className="text-[10px] text-slate-400 line-clamp-1">
                       {item.isPromo
                         ? getComboItemsText(item, products)
@@ -666,7 +722,7 @@ export default function SalesTab({
 
           {filteredCatalog.length === 0 && (
             <div className="col-span-full bg-slate-900/50 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-xs">
-              No se encontraron bebidas ni combos que coincidan con "{searchTerm}".
+              No se encontraron bebidas ni combos que coincidan con los criterios seleccionados.
             </div>
           )}
         </div>
@@ -984,7 +1040,7 @@ export default function SalesTab({
         </div>
       </div>
 
-      {/* 🎮 MODAL DE LA LUPITA (USO EXCLUSIVO DE DETAIL DESCRIPTION) */}
+      {/* 🎮 MODAL DE LA LUPITA */}
       {steamDetailItem && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl space-y-0 relative animate-fadeIn max-h-[90vh] flex flex-col">
@@ -1062,7 +1118,7 @@ export default function SalesTab({
                       rows="3"
                       value={steamDescInput}
                       onChange={(e) => setSteamDescInput(e.target.value)}
-                      placeholder="Escribí acá el detalle adicional para la ficha (Ej: Rinde 4 personas, servir muy frío)..."
+                      placeholder="Escribí acá el detalle adicional para la ficha..."
                       className="w-full bg-slate-950 border border-fuchsia-500/60 rounded-2xl p-3 text-white text-xs focus:outline-none focus:border-fuchsia-500 shadow-inner"
                     />
                   </div>
@@ -1071,9 +1127,6 @@ export default function SalesTab({
                     <label className="text-[10px] font-bold text-fuchsia-400 uppercase tracking-wider flex items-center gap-1">
                       <Link2 className="w-3.5 h-3.5" /> Vincular Promos Similares (Recíproco 🔄):
                     </label>
-                    <p className="text-[10px] text-slate-400">
-                      Las promos marcadas también recomendarán automáticamente esta promo en sus fichas.
-                    </p>
 
                     <div className="max-h-36 overflow-y-auto space-y-1 pr-1 border border-slate-800 rounded-2xl p-2 bg-slate-950/80">
                       {promos.map((pr) => {
@@ -1153,7 +1206,7 @@ export default function SalesTab({
                       </p>
                     ) : (
                       <p className="text-slate-500 italic">
-                        Sin detalles adicionales. Tocá el ícono ⚙️ arriba a la derecha de la foto para escribir notas o detalles para esta pestaña.
+                        Sin detalles adicionales.
                       </p>
                     )}
                   </div>
