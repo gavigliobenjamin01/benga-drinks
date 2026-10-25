@@ -7,20 +7,19 @@ import {
   updateDoc,
   deleteDoc
 } from 'firebase/firestore';
-import { db } from './firebase';
-import { formatCurrency, formatPromoDescription } from './utils';
+import { db } from "./firebase";
+import { formatCurrency, formatPromoDescription } from "./utils";
 
-// HOOK PERSONALIZADO
-import { useAppData } from './hooks/useAppData';
+// Layout
+import Sidebar from "./components/layout/Sidebar";
 
-// COMPONENTES DE ESTRUCTURA Y PESTAÑAS
-import Sidebar from './components/Sidebar';
-import SalesTab from './components/SalesTab';
-import DashboardTab from './components/DashboardTab';
-import InventoryTab from './components/InventoryTab';
-import PromosTab from './components/PromosTab';
-import StockEntryTab from './components/StockEntryTab';
-import ClientsTab from './components/ClientsTab';
+// Tabs
+import SalesTab from "./components/tabs/SalesTab";
+import DashboardTab from "./components/tabs/DashboardTab";
+import InventoryTab from "./components/tabs/InventoryTab";
+import PromosTab from "./components/tabs/PromosTab";
+import ClientsTab from "./components/tabs/ClientsTab";
+import StockEntryTab from "./components/tabs/StockEntryTab";
 
 // MODALES COMPONENTIZADOS
 import WebOrdersModal from './components/modals/WebOrdersModal';
