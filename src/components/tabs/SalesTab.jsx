@@ -1321,29 +1321,41 @@ export default function SalesTab({
                   )}
                 </div>
 
-                <div className="space-y-2 pb-3 border-b border-dashed border-slate-800">
-                  <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Detalle:</span>
-                  {ticketModalData.items.map((item, idx) => (
-                    <div key={idx} className="space-y-0.5">
-                      <div className="flex justify-between">
-                        <span>{item.qty}x {item.name}</span>
-                        <span className="font-bold">{formatCurrency((item.price || item.effectivePrice || 0) * item.qty)}</span>
-                      </div>
-                      {item.raw?.detailDescription && (
-                        <div className="text-[9px] text-fuchsia-300 pl-2">
-                          + {item.raw.detailDescription}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+              <div className="space-y-2 pb-3 border-b border-dashed border-slate-800">
+  <span className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Detalle:</span>
+  {ticketModalData.items.map((item, idx) => {
+    // Obtenemos los componentes limpios del combo (las botellas)
+    const comboSubs = (item.items || item.raw?.items || []).map((sub) => {
+      const targetId = sub.productId || sub.id;
+      const foundProd = products.find((p) => p.id === targetId || (p.name && sub.name && p.name.toLowerCase() === sub.name.toLowerCase()));
+      const subName = foundProd ? foundProd.name : (sub.name || 'Producto');
+      const subQty = sub.quantity || sub.qty || 1;
+      return `${subQty}x ${subName}`;
+    });
 
-                  {ticketModalData.shippingFee > 0 && (
-                    <div className="flex justify-between text-slate-400 pt-1">
-                      <span>Costo de Envío</span>
-                      <span>{formatCurrency(ticketModalData.shippingFee)}</span>
-                    </div>
-                  )}
-                </div>
+    return (
+      <div key={idx} className="space-y-0.5">
+        <div className="flex justify-between">
+          <span>{item.qty}x {item.name}</span>
+          <span className="font-bold">{formatCurrency((item.price || item.effectivePrice || 0) * item.qty)}</span>
+        </div>
+        {/* Mostramos las botellas limpias abajo en lugar de la descripción larga */}
+        {comboSubs.length > 0 && (
+          <div className="text-[9px] text-fuchsia-300 pl-2">
+            + {comboSubs.join(', ')}
+          </div>
+        )}
+      </div>
+    );
+  })}
+
+  {ticketModalData.shippingFee > 0 && (
+    <div className="flex justify-between text-slate-400 pt-1">
+      <span>Costo de Envío</span>
+      <span>{formatCurrency(ticketModalData.shippingFee)}</span>
+    </div>
+  )}
+</div>
 
                 <div className="pt-1 flex justify-between items-center text-sm font-bold">
                   <span className="text-slate-300">TOTAL:</span>
